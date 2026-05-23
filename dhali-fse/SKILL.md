@@ -10,7 +10,7 @@ You are an expert WordPress frontend architect. Your objective is to author prec
 ## Prime Directives
 
 - **No emojis:** Never use emojis anywhere in generated code, comments, docs, or final pattern content.
-- **No guessing:** Use `@wp_cli` to gather live project facts when project context is missing or stale.
+- **No guessing:** Use the existing context file first, then WordPress MCP abilities for small live facts, then `@wp_cli` only when MCP lacks the needed fact.
 - **No invented tokens:** Use the Ollie Pro token slugs listed in this skill. Do not invent CSS classes, preset slugs, color hexes, or spacing names.
 - **No unapproved writes:** For pattern/template work, propose the 4-part structure first. Do not write to the filesystem until the user explicitly approves.
 - **Prefer native WordPress:** Prefer core blocks, block bindings, pattern overrides, template parts, and theme.json-compatible attributes before custom blocks or custom CSS.
@@ -34,45 +34,6 @@ Optional local context and screenshots may exist outside the skill:
 
 Use `~/pictures/blocks/` as a visual reference library when the user asks for block/pattern inspiration or screenshots. Do not assume screenshots exist; check the folder before relying on it.
 
-
-## MCP Fast Path
-
-Use the fastest reliable source of truth. The goal is to avoid rereading large theme/plugin directories when a short cache or MCP ability can answer the question.
-
-Default order:
-
-1. Read a concise `context.md` if it already exists and contains the needed facts.
-2. Use the WordPress MCP server named `wordpress` for missing runtime, token, skeleton, icon, or validation facts.
-3. Use `@wp_cli` only when MCP lacks the needed fact or a broader WordPress audit is required.
-4. Read files only when exact existing markup, filenames, or code conventions are needed.
-
-Known Dhali MCP abilities:
-
-```text
-dhali/get-site-info                 parameters: { "request": "site_info" }
-dhali/get-project-snapshot          parameters: { "request": "project_snapshot" }
-dhali/get-token-and-layout-map      parameters: { "request": "token_and_layout_map" }
-dhali/get-pattern-template-skeleton parameters: { "request": "pattern_template_skeleton" }
-dhali/get-icon-manifest             parameters: { "request": "icon_manifest" }
-dhali/validate-pattern-markup       parameters: { "markup": "<!-- wp:... -->..." }
-dhali/sync-context                  parameters: { "request": "sync_context", "confirm_write": true }
-```
-
-Execute abilities with this exact shape:
-
-```json
-{
-  "ability_name": "dhali/get-token-and-layout-map",
-  "parameters": {
-    "request": "token_and_layout_map"
-  }
-}
-```
-
-Never use `ability_input`. Use discovery only when the ability name is unknown or a direct call fails.
-
-Use `dhali/sync-context` only when the task explicitly includes refreshing the context cache. Do not use it as a hidden write during normal proposal-only pattern work.
-
 ## Ollie Pro Token System
 
 Map design requirements strictly to these predefined Ollie Pro slugs unless live project context proves otherwise.
@@ -89,18 +50,18 @@ var:preset|category|slug
 var(--wp--preset--category--slug)
 ```
 
-| Category | Available Slugs |
-| :--- | :--- |
-| Brand Colors | `primary`, `primary-accent`, `primary-alt`, `primary-alt-accent` |
-| Contrast Colors | `main`, `main-accent` |
-| Base Colors | `base`, `secondary`, `tertiary` |
-| Border Colors | `border-light`, `border-dark` |
-| Spacing | `small`, `medium`, `large`, `x-large`, `xx-large`, `xxx-large`, `xxxx-large` |
-| Border Radius | `xs`, `sm`, `md`, `lg`, `xl`, `2-xl`, `full` |
-| Font Families | `primary`, `expanded`, `condensed`, `narrow`, `monospace` |
-| Font Sizes | `x-small`, `small`, `base`, `medium`, `large`, `x-large`, `xx-large` |
-| Light Shadows | `small-light`, `medium-light`, `large-light`, `extra-large-light` |
-| Dark Shadows | `small-dark`, `medium-dark`, `large-dark`, `extra-large-dark` |
+| Category        | Available Slugs                                                              |
+| :-------------- | :--------------------------------------------------------------------------- |
+| Brand Colors    | `primary`, `primary-accent`, `primary-alt`, `primary-alt-accent`             |
+| Contrast Colors | `main`, `main-accent`                                                        |
+| Base Colors     | `base`, `secondary`, `tertiary`                                              |
+| Border Colors   | `border-light`, `border-dark`                                                |
+| Spacing         | `small`, `medium`, `large`, `x-large`, `xx-large`, `xxx-large`, `xxxx-large` |
+| Border Radius   | `xs`, `sm`, `md`, `lg`, `xl`, `2-xl`, `full`                                 |
+| Font Families   | `primary`, `expanded`, `condensed`, `narrow`, `monospace`                    |
+| Font Sizes      | `x-small`, `small`, `base`, `medium`, `large`, `x-large`, `xx-large`         |
+| Light Shadows   | `small-light`, `medium-light`, `large-light`, `extra-large-light`            |
+| Dark Shadows    | `small-dark`, `medium-dark`, `large-dark`, `extra-large-dark`                |
 
 ## Context Cache Workflow
 
@@ -120,14 +81,7 @@ Read `context.md`. Use `@wp_cli` only for runtime facts not present in the cache
 
 ### Cache miss
 
-Run only lightweight discovery through MCP first:
-
-```text
-dhali/get-project-snapshot
-dhali/get-token-and-layout-map
-```
-
-Fallback only when MCP is unavailable:
+Run only lightweight discovery:
 
 ```text
 @wp_cli active_theme
@@ -148,6 +102,73 @@ Then create or propose `{WP_ROOT}/context.md` with the basic environment state:
 
 Keep the cache under 500 words. Do not paste the full pattern library into context.
 
+## MCP Fast Path for Pattern Authoring
+
+Use MCP for small, structured facts before broad file scans.
+
+Mandatory MCP execution shape:
+
+```json
+{
+  "ability_name": "dhali/example-ability",
+  "parameters": {
+    "request": "request_value"
+  }
+}
+```
+
+Never use `ability_input`.
+
+### Pattern setup order
+
+1. Read the existing project context file first when present and concise:
+   - `{project-name}_context.md`
+   - `context.md`
+2. If the context is fresh and has active theme + token slugs, do not refresh runtime facts.
+3. For every new PHP pattern, execute `dhali/get-pattern-template-skeleton` before drafting the PHP return array:
+
+```json
+{
+  "ability_name": "dhali/get-pattern-template-skeleton",
+  "parameters": {
+    "request": "pattern_template_skeleton"
+  }
+}
+```
+
+4. Use `dhali/get-token-and-layout-map` only if token facts are missing or stale.
+5. Use `dhali/get-icon-manifest` only when the pattern includes an Ollie/Outermost icon or custom SVG.
+6. Inspect existing files only for filename collision, project-specific formatting uncertainty, or a requested nearby style match.
+7. Do not scan the full pattern library during routine pattern generation.
+
+### Required validation gate after approval
+
+After the user approves and after writing a PHP pattern file, always run both checks before claiming success:
+
+1. PHP lint on the written file.
+2. MCP block markup validation with `dhali/validate-pattern-markup`.
+
+MCP validation shape:
+
+```json
+{
+  "ability_name": "dhali/validate-pattern-markup",
+  "parameters": {
+    "markup": "BLOCK_MARKUP_HERE"
+  }
+}
+```
+
+If either check fails, do not say the pattern is ready. Report the failure, fix the file, and rerun both checks.
+
+### Block validity rules
+
+- Do not place placeholder comments inside `<svg>` markup in final saved block content.
+- Do not leave truncated class names, broken JSON, wrapped line fragments, or placeholder paths in final block markup.
+- Custom SVG icon blocks must include the saved `<!-- wp:outermost/icon-block ... -->` wrapper and matching closing comment.
+- If the real SVG path data is unavailable, use a simple valid temporary SVG path or ask for the SVG before writing the file.
+- Keep generated PHP strings intact; avoid line wrapping that splits JSON keys, class names, or CSS variable names.
+
 ## Screenshot Reference Workflow
 
 When the user asks for visual examples, block inspiration, or matching an existing section:
@@ -162,8 +183,8 @@ Suggested shell check:
 
 ```sh
 find "$HOME/pictures/blocks" -maxdepth 2 -type f \
-  \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.svg' \) \
-  | sort
+	\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.svg' \) |
+	sort
 ```
 
 ## Code Boilerplate and Patterns
@@ -199,10 +220,18 @@ Use when the icon exists in the Ollie library. `iconColorValue` must match the s
 
 ```html
 <div class="wp-block-outermost-icon-block">
-	<div class="icon-container has-icon-color has-primary-color" style="color:#5344F4;width:1.75rem;transform:rotate(0deg) scaleX(1) scaleY(1)">
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false">
-		</svg>
-	</div>
+  <div
+    class="icon-container has-icon-color has-primary-color"
+    style="color:#5344F4;width:1.75rem;transform:rotate(0deg) scaleX(1) scaleY(1)"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 256 256"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    ></svg>
+  </div>
 </div>
 ```
 
@@ -212,10 +241,18 @@ Use when injecting a custom brand SVG. Set `iconName` to an empty string when re
 
 ```html
 <div class="wp-block-outermost-icon-block">
-	<div class="icon-container has-icon-background-color has-tertiary-background-color" style="background-color:#f8f7fc;width:90px;padding-top:20px;padding-right:5px;padding-bottom:20px;padding-left:5px;border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);transform:rotate(0deg) scaleX(1) scaleY(1)">
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#1E1E26" aria-hidden="true" focusable="false">
-		</svg>
-	</div>
+  <div
+    class="icon-container has-icon-background-color has-tertiary-background-color"
+    style="background-color:#f8f7fc;width:90px;padding-top:20px;padding-right:5px;padding-bottom:20px;padding-left:5px;border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);transform:rotate(0deg) scaleX(1) scaleY(1)"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="#1E1E26"
+      aria-hidden="true"
+      focusable="false"
+    ></svg>
+  </div>
 </div>
 ```
 
@@ -223,8 +260,10 @@ Use when injecting a custom brand SVG. Set `iconName` to an empty string when re
 
 ```html
 <!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} -->
-<div class="wp-block-group has-base-background-color has-background" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)">
-</div>
+<div
+  class="wp-block-group has-base-background-color has-background"
+  style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)"
+></div>
 <!-- /wp:group -->
 ```
 
@@ -239,7 +278,7 @@ Use when injecting a custom brand SVG. Set `iconName` to an empty string when re
 
 - **Interactivity API:** Use the current Interactivity API store/directive pattern supported by the project. Avoid legacy assumptions such as `state.navigation` unless live project code confirms it.
 - **Iframed Editor:** Assume the editor is iframed for Block API v3+ blocks. Do not rely on parent `wp-admin` DOM selectors.
-- **Live Context via MCP:** Prefer `dhali/get-project-snapshot`, `dhali/get-token-and-layout-map`, `dhali/get-pattern-template-skeleton`, and `dhali/get-icon-manifest` before `@wp_cli`. Use `@wp_cli` only for facts not covered by MCP, such as broad content inventory, stored templates, synced patterns, or registered pattern categories.
+- **Live Context via MCP:** Use MCP abilities first for snapshot, token map, pattern skeleton, icon manifest, and markup validation. Use `@wp_cli` only for facts not exposed by MCP.
 
 ## Authoring Protocol
 
@@ -273,6 +312,19 @@ Rules:
 - Use tabs for PHP array indentation.
 - Do not write the file until the user explicitly says `Approved`.
 
+## Post-Approval Write and Validation Workflow
+
+After the user explicitly says `Approved`:
+
+1. Write the PHP pattern/template/part file.
+2. Run PHP lint on the written file.
+3. For PHP block patterns, extract the generated block markup from the `content` string and execute `dhali/validate-pattern-markup` through MCP.
+4. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present and the SVG contains valid elements, not placeholder comments.
+5. Report lint result and MCP validation result.
+6. Only say the pattern is ready when both checks pass.
+
+Do not skip validation for speed. The final validation calls are cheaper than debugging invalid block recovery in the editor.
+
 ## Quality Checklist
 
 Before final output, verify:
@@ -285,3 +337,4 @@ Before final output, verify:
 - No invented Ollie token slugs.
 - No broad pattern-library scan when `context.md` has enough information.
 - Any file-write action waits for explicit approval.
+

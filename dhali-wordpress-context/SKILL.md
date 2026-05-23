@@ -19,51 +19,61 @@ Prefer project files and approved WordPress tooling over assumptions.
 
 When WordPress 7.0 features are relevant, detect whether the current install supports them before using them. Prefer progressive enhancement and backwards-compatible fallbacks unless the user explicitly targets WordPress 7.0-only code.
 
+## MCP Fast Path for Context Gathering
 
-## MCP Fast Path for Low-Token Context
+Use this fast path before broad filesystem reads or WP-CLI scans.
 
-When the WordPress MCP server named `wordpress` is available, prefer the registered Dhali abilities before broad file reads or WP-CLI audits. This is the default low-token path for routine Dhali/Ollie/FSE work.
+When the WordPress MCP server named `wordpress` is connected and the relevant ability exists, prefer MCP over `@wp_cli` for runtime facts.
 
-Use this order:
-
-1. If a concise `context.md` already exists and appears current, read it first.
-2. For missing or stale runtime facts, call known MCP abilities directly. Do not spend tokens on discovery unless an ability call fails or the required ability is unknown.
-3. Use `@wp_cli` only when MCP lacks coverage or the task requires a broad audit.
-4. Read project files only for exact existing code style, nearby examples, filenames, or implementation details not exposed through MCP.
-
-Execute MCP abilities with `mcp-adapter-execute-ability` using this exact top-level shape:
+Execution shape is mandatory:
 
 ```json
 {
-  "ability_name": "dhali/get-project-snapshot",
+  "ability_name": "dhali/example-ability",
   "parameters": {
-    "request": "project_snapshot"
+    "request": "request_value"
   }
 }
 ```
 
-Never use `ability_input`; the execute tool requires `parameters`.
+Never use `ability_input`.
 
-Known fast abilities:
+### Context sync order
 
-| Ability | Parameters | Use |
-| :--- | :--- | :--- |
-| `dhali/get-site-info` | `{ "request": "site_info" }` | Site title, active theme name/slug, template, stylesheet. |
-| `dhali/get-project-snapshot` | `{ "request": "project_snapshot" }` | Compact WP/PHP/theme/layout runtime facts. |
-| `dhali/get-token-and-layout-map` | `{ "request": "token_and_layout_map" }` | Theme preset slugs and layout settings. |
-| `dhali/get-pattern-template-skeleton` | `{ "request": "pattern_template_skeleton" }` | Standard Dhali PHP pattern return-array skeleton. |
-| `dhali/get-icon-manifest` | `{ "request": "icon_manifest" }` | Ollie/Outermost icon block wrappers and custom SVG behavior. |
-| `dhali/validate-pattern-markup` | `{ "markup": "<!-- wp:... -->..." }` | Validate generated block markup without extra file scans. |
-| `dhali/sync-context` | `{ "request": "sync_context", "confirm_write": true }` | Refresh `context.md`; use only when the task explicitly includes context cache updating. |
+1. Find the WordPress root.
+2. Look for an existing concise context file in this order:
+   - `{project-name}_context.md`
+   - `context.md`
+   - known memory pointer, only after confirming the file exists
+3. If the context file exists and is fresh enough for the task, read it and stop gathering broad context.
+4. If runtime/theme/token facts are missing or stale, use MCP abilities in this order:
+   - `dhali/get-project-snapshot` with `{ "request": "project_snapshot" }`
+   - `dhali/get-site-info` with `{ "request": "site_info" }`
+   - `dhali/get-token-and-layout-map` with `{ "request": "token_and_layout_map" }`
+   - `dhali/get-icon-manifest` with `{ "request": "icon_manifest" }` only for icon/custom SVG work
+5. Use `@wp_cli` only when MCP lacks the needed fact or an MCP ability returns incomplete data.
+6. Read `theme.json` only if the token map is empty or missing a required token group.
+7. Do not inspect pattern examples, plugin directories, or screenshots unless the current task requires authoring or matching a specific design.
 
-For pattern/template authoring, the usual minimal context set is:
+### Context write rule
 
-- `dhali/get-project-snapshot`
-- `dhali/get-token-and-layout-map`
-- `dhali/get-pattern-template-skeleton` only for new PHP patterns
-- `dhali/get-icon-manifest` only when the design uses icons or custom SVGs
+If the task is specifically to create/update the context cache, prefer the MCP ability:
 
-Do not run full WordPress 7.0 audits, plugin inventories, REST namespace lists, or broad greps unless the task actually touches those areas.
+```json
+{
+  "ability_name": "dhali/sync-context",
+  "parameters": {
+    "request": "sync_context",
+    "confirm_write": true
+  }
+}
+```
+
+After `dhali/sync-context` succeeds, report the returned path and bytes. Do not also rewrite the file by hand unless the MCP ability fails or returns incomplete content.
+
+### Failure handling
+
+If an MCP ability returns empty arrays or incomplete data, say which ability was incomplete and then use the smallest fallback needed. Example: if `dhali/get-token-and-layout-map` returns empty token arrays, read only the active theme `theme.json`, not the whole theme or pattern library.
 
 ## Required context gathering order
 
@@ -83,17 +93,7 @@ If the WordPress root cannot be found, stop and report the issue clearly.
 
 Determine the installed WordPress version before making API assumptions.
 
-Preferred fast path:
-
-```text
-MCP dhali/get-project-snapshot
-```
-
-Fallback:
-
-```text
-@wp_cli core_version
-```
+Preferred: use `dhali/get-project-snapshot` through MCP. Fallback to `@wp_cli core_version` only when MCP is unavailable or incomplete.
 
 For WordPress 7 readiness checks, prefer:
 
@@ -141,17 +141,7 @@ Determine the active theme before reading theme files.
 
 Use WordPress tooling when available.
 
-Preferred fast path:
-
-```text
-MCP dhali/get-site-info
-```
-
-Fallback:
-
-```text
-@wp_cli active_theme
-```
+Preferred: use `dhali/get-site-info` through MCP. Fallback to `@wp_cli active_theme` only when MCP is unavailable or incomplete.
 
 Fallback:
 
@@ -170,7 +160,7 @@ Record:
 
 ### 4. Read canonical theme tokens
 
-Read the active theme’s `theme.json`.
+First use `dhali/get-token-and-layout-map` through MCP. Read the active theme’s `theme.json` only if the MCP token map is empty, incomplete, or the task needs token details not exposed by MCP.
 
 If the active theme is a child theme, check both:
 
@@ -191,13 +181,7 @@ Gather canonical token slugs for:
 - block-level custom CSS support conventions, if present
 - pseudo-element styling in `theme.json`, especially button hover/focus/focus-visible/active rules
 
-When MCP can provide merged token/layout facts, prefer it for final token confirmation:
-
-```text
-MCP dhali/get-token-and-layout-map
-```
-
-Fallback:
+When WordPress tooling can provide merged global settings, prefer it for final token confirmation:
 
 ```text
 @wp_cli global_styles_get
