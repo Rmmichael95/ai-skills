@@ -104,7 +104,6 @@ function dhali_mcp_collect_values_by_key( $value, $key = 'slug' ) {
 	}
 
 	$values = array_values( array_unique( $values ) );
-	sort( $values, SORT_NATURAL | SORT_FLAG_CASE );
 
 	return $values;
 }
@@ -135,21 +134,67 @@ function dhali_mcp_array_get( $array, $path ) {
  *
  * @param array<int|string, mixed>       $settings        Theme settings from WP_Theme_JSON_Resolver.
  * @param array<int|string, mixed>       $global_settings Settings from wp_get_global_settings().
- * @param array<int, array<int, string>> $paths     Candidate paths.
+ * @param array<int|string, mixed>       $raw_settings    Settings from active theme.json.
+ * @param array<int, array<int, string>> $paths           Candidate paths.
  * @return array<int, string>
  */
-function dhali_mcp_collect_token_slugs_from_paths( $settings, $global_settings, $paths ) {
+function dhali_mcp_collect_token_slugs_from_paths( $settings, $global_settings, $raw_settings, $paths ) {
 	$slugs = array();
 
 	foreach ( $paths as $path ) {
+		// Prefer the active theme's raw theme.json order, then merge compiled/global fallbacks.
+		$slugs = array_merge( $slugs, dhali_mcp_collect_values_by_key( dhali_mcp_array_get( $raw_settings, $path ), 'slug' ) );
 		$slugs = array_merge( $slugs, dhali_mcp_collect_values_by_key( dhali_mcp_array_get( $settings, $path ), 'slug' ) );
 		$slugs = array_merge( $slugs, dhali_mcp_collect_values_by_key( dhali_mcp_array_get( $global_settings, $path ), 'slug' ) );
 	}
 
 	$slugs = array_values( array_unique( array_filter( $slugs ) ) );
-	sort( $slugs, SORT_NATURAL | SORT_FLAG_CASE );
 
 	return $slugs;
+}
+
+/**
+ * Read active theme theme.json directly.
+ *
+ * This provides a fast canonical fallback when compiled/global settings are
+ * origin-grouped or transformed by WordPress internals.
+ *
+ * @return array{source: string, version: string, settings: array<string, mixed>}
+ */
+function dhali_mcp_get_raw_theme_json_settings_data() {
+	$paths = array(
+		trailingslashit( get_stylesheet_directory() ) . 'theme.json',
+	);
+
+	$template_path = trailingslashit( get_template_directory() ) . 'theme.json';
+	if ( ! in_array( $template_path, $paths, true ) ) {
+		$paths[] = $template_path;
+	}
+
+	foreach ( $paths as $path ) {
+		if ( ! is_readable( $path ) ) {
+			continue;
+		}
+
+		$raw  = file_get_contents( $path );
+		$data = json_decode( $raw, true );
+
+		if ( ! is_array( $data ) ) {
+			continue;
+		}
+
+		return array(
+			'source'   => $path,
+			'version'  => isset( $data['version'] ) ? (string) $data['version'] : '',
+			'settings' => isset( $data['settings'] ) && is_array( $data['settings'] ) ? $data['settings'] : array(),
+		);
+	}
+
+	return array(
+		'source'   => 'unavailable',
+		'version'  => '',
+		'settings' => array(),
+	);
 }
 
 /**
@@ -160,6 +205,7 @@ function dhali_mcp_collect_token_slugs_from_paths( $settings, $global_settings, 
 function dhali_mcp_get_theme_settings_data() {
 	$settings        = array();
 	$global_settings = array();
+	$raw_theme_json  = dhali_mcp_get_raw_theme_json_settings_data();
 
 	if ( class_exists( 'WP_Theme_JSON_Resolver' ) ) {
 		$theme_json = WP_Theme_JSON_Resolver::get_theme_data();
@@ -174,11 +220,13 @@ function dhali_mcp_get_theme_settings_data() {
 	}
 
 	return array(
-		'settings'        => is_array( $settings ) ? $settings : array(),
-		'global_settings' => is_array( $global_settings ) ? $global_settings : array(),
+		'settings'           => is_array( $settings ) ? $settings : array(),
+		'global_settings'    => is_array( $global_settings ) ? $global_settings : array(),
+		'raw_settings'       => $raw_theme_json['settings'],
+		'token_source'       => $raw_theme_json['source'],
+		'theme_json_version' => $raw_theme_json['version'],
 	);
 }
-
 /**
  * Return a compact project snapshot.
  *
@@ -216,13 +264,20 @@ function dhali_mcp_get_token_and_layout_data() {
 	$settings_data = dhali_mcp_get_theme_settings_data();
 	$settings      = $settings_data['settings'];
 	$global        = $settings_data['global_settings'];
+	$raw           = $settings_data['raw_settings'];
 
-	$layout = dhali_mcp_array_get( $global, array( 'layout' ) );
+	$layout = dhali_mcp_array_get( $raw, array( 'layout' ) );
+	if ( ! is_array( $layout ) ) {
+		$layout = dhali_mcp_array_get( $global, array( 'layout' ) );
+	}
 	if ( ! is_array( $layout ) ) {
 		$layout = dhali_mcp_array_get( $settings, array( 'layout' ) );
 	}
 
-	$custom = dhali_mcp_array_get( $settings, array( 'custom' ) );
+	$custom = dhali_mcp_array_get( $raw, array( 'custom' ) );
+	if ( ! is_array( $custom ) ) {
+		$custom = dhali_mcp_array_get( $settings, array( 'custom' ) );
+	}
 	if ( ! is_array( $custom ) ) {
 		$custom = dhali_mcp_array_get( $global, array( 'custom' ) );
 	}
@@ -230,6 +285,7 @@ function dhali_mcp_get_token_and_layout_data() {
 	$colors = dhali_mcp_collect_token_slugs_from_paths(
 		$settings,
 		$global,
+		$raw,
 		array(
 			array( 'color', 'palette' ),
 		)
@@ -238,14 +294,25 @@ function dhali_mcp_get_token_and_layout_data() {
 	$gradients = dhali_mcp_collect_token_slugs_from_paths(
 		$settings,
 		$global,
+		$raw,
 		array(
 			array( 'color', 'gradients' ),
+		)
+	);
+
+	$duotone = dhali_mcp_collect_token_slugs_from_paths(
+		$settings,
+		$global,
+		$raw,
+		array(
+			array( 'color', 'duotone' ),
 		)
 	);
 
 	$spacing = dhali_mcp_collect_token_slugs_from_paths(
 		$settings,
 		$global,
+		$raw,
 		array(
 			array( 'spacing', 'spacingSizes' ),
 			array( 'spacing', 'spacingScale' ),
@@ -255,6 +322,7 @@ function dhali_mcp_get_token_and_layout_data() {
 	$font_sizes = dhali_mcp_collect_token_slugs_from_paths(
 		$settings,
 		$global,
+		$raw,
 		array(
 			array( 'typography', 'fontSizes' ),
 		)
@@ -263,6 +331,7 @@ function dhali_mcp_get_token_and_layout_data() {
 	$font_families = dhali_mcp_collect_token_slugs_from_paths(
 		$settings,
 		$global,
+		$raw,
 		array(
 			array( 'typography', 'fontFamilies' ),
 		)
@@ -271,6 +340,7 @@ function dhali_mcp_get_token_and_layout_data() {
 	$shadows = dhali_mcp_collect_token_slugs_from_paths(
 		$settings,
 		$global,
+		$raw,
 		array(
 			array( 'shadow', 'presets' ),
 			array( 'shadow' ),
@@ -280,7 +350,9 @@ function dhali_mcp_get_token_and_layout_data() {
 	$border_radius = dhali_mcp_collect_token_slugs_from_paths(
 		$settings,
 		$global,
+		$raw,
 		array(
+			array( 'border', 'radiusSizes' ),
 			array( 'border', 'radius' ),
 			array( 'custom', 'borderRadius' ),
 			array( 'custom', 'border-radius' ),
@@ -289,29 +361,36 @@ function dhali_mcp_get_token_and_layout_data() {
 
 	// Some themes store radius tokens as associative custom keys rather than objects with slugs.
 	if ( empty( $border_radius ) ) {
-		$custom_radius = dhali_mcp_array_get( $settings, array( 'custom', 'borderRadius' ) );
+		$custom_radius = dhali_mcp_array_get( $raw, array( 'custom', 'borderRadius' ) );
+		if ( ! is_array( $custom_radius ) ) {
+			$custom_radius = dhali_mcp_array_get( $settings, array( 'custom', 'borderRadius' ) );
+		}
+		if ( ! is_array( $custom_radius ) ) {
+			$custom_radius = dhali_mcp_array_get( $raw, array( 'custom', 'border-radius' ) );
+		}
 		if ( ! is_array( $custom_radius ) ) {
 			$custom_radius = dhali_mcp_array_get( $settings, array( 'custom', 'border-radius' ) );
 		}
 		if ( is_array( $custom_radius ) ) {
 			$border_radius = array_values( array_filter( array_keys( $custom_radius ), 'is_string' ) );
-			sort( $border_radius, SORT_NATURAL | SORT_FLAG_CASE );
 		}
 	}
 
 	return array(
-		'colors'        => $colors,
-		'gradients'     => $gradients,
-		'spacing'       => $spacing,
-		'font_sizes'    => $font_sizes,
-		'font_families' => $font_families,
-		'shadows'       => $shadows,
-		'border_radius' => $border_radius,
-		'layout'        => is_array( $layout ) ? $layout : array(),
-		'custom'        => is_array( $custom ) ? $custom : array(),
+		'token_source'       => $settings_data['token_source'],
+		'theme_json_version' => $settings_data['theme_json_version'],
+		'colors'             => $colors,
+		'gradients'          => $gradients,
+		'duotone'            => $duotone,
+		'spacing'            => $spacing,
+		'font_sizes'         => $font_sizes,
+		'font_families'      => $font_families,
+		'shadows'            => $shadows,
+		'border_radius'      => $border_radius,
+		'layout'             => is_array( $layout ) ? $layout : array(),
+		'custom'             => is_array( $custom ) ? $custom : array(),
 	);
 }
-
 /**
  * Resolve the project slug for a context filename.
  *
@@ -345,7 +424,11 @@ function dhali_mcp_build_context_markdown() {
 	$content  = '# ' . ucwords( str_replace( array( '-', '_' ), ' ', dhali_mcp_get_project_slug() ) ) . " WordPress Context\n\n";
 	$content .= "## Generated\n\n";
 	$content .= '- Date/time: ' . gmdate( 'Y-m-d H:i:s' ) . " UTC\n";
-	$content .= '- WordPress root: ' . untrailingslashit( ABSPATH ) . "\n\n";
+	$content .= '- WordPress root: ' . untrailingslashit( ABSPATH ) . "\n";
+	$content .= '- Token source: MCP dhali/get-token-and-layout-map' . "\n";
+	$content .= '- Token data source: ' . $tokens['token_source'] . "\n";
+	$content .= '- theme.json version: ' . $tokens['theme_json_version'] . "\n";
+	$content .= '- Fallbacks used: none' . "\n\n";
 
 	$content .= "## WordPress Runtime\n\n";
 	$content .= '- Core version: ' . $snapshot['core_version'] . "\n";
@@ -364,6 +447,7 @@ function dhali_mcp_build_context_markdown() {
 	$content .= "## Canonical Token Slugs\n\n";
 	$content .= '- Colors: ' . ( ! empty( $tokens['colors'] ) ? implode( ', ', $tokens['colors'] ) : 'None found' ) . "\n";
 	$content .= '- Gradients: ' . ( ! empty( $tokens['gradients'] ) ? implode( ', ', $tokens['gradients'] ) : 'None found' ) . "\n";
+	$content .= '- Duotone: ' . ( ! empty( $tokens['duotone'] ) ? implode( ', ', $tokens['duotone'] ) : 'None found' ) . "\n";
 	$content .= '- Spacing: ' . ( ! empty( $tokens['spacing'] ) ? implode( ', ', $tokens['spacing'] ) : 'None found' ) . "\n";
 	$content .= '- Font sizes: ' . ( ! empty( $tokens['font_sizes'] ) ? implode( ', ', $tokens['font_sizes'] ) : 'None found' ) . "\n";
 	$content .= '- Font families: ' . ( ! empty( $tokens['font_families'] ) ? implode( ', ', $tokens['font_families'] ) : 'None found' ) . "\n";
@@ -393,23 +477,26 @@ function dhali_register_mcp_abilities() {
 	$token_output_schema = array(
 		'type'       => 'object',
 		'properties' => array(
-			'colors'        => dhali_mcp_string_array_schema( 'Color preset slugs from theme.json.' ),
-			'gradients'     => dhali_mcp_string_array_schema( 'Gradient preset slugs from theme.json.' ),
-			'spacing'       => dhali_mcp_string_array_schema( 'Spacing preset slugs from theme.json.' ),
-			'font_sizes'    => dhali_mcp_string_array_schema( 'Font size preset slugs from theme.json.' ),
-			'font_families' => dhali_mcp_string_array_schema( 'Font family preset slugs from theme.json.' ),
-			'shadows'       => dhali_mcp_string_array_schema( 'Shadow preset slugs from theme.json.' ),
-			'border_radius' => dhali_mcp_string_array_schema( 'Border radius preset slugs from theme.json or custom tokens.' ),
-			'layout'        => array(
+			'token_source'       => dhali_mcp_string_schema( 'Source used for token extraction.' ),
+			'theme_json_version' => dhali_mcp_string_schema( 'theme.json version.' ),
+			'colors'             => dhali_mcp_string_array_schema( 'Color preset slugs from theme.json.' ),
+			'gradients'          => dhali_mcp_string_array_schema( 'Gradient preset slugs from theme.json.' ),
+			'duotone'            => dhali_mcp_string_array_schema( 'Duotone preset slugs from theme.json.' ),
+			'spacing'            => dhali_mcp_string_array_schema( 'Spacing preset slugs from theme.json.' ),
+			'font_sizes'         => dhali_mcp_string_array_schema( 'Font size preset slugs from theme.json.' ),
+			'font_families'      => dhali_mcp_string_array_schema( 'Font family preset slugs from theme.json.' ),
+			'shadows'            => dhali_mcp_string_array_schema( 'Shadow preset slugs from theme.json.' ),
+			'border_radius'      => dhali_mcp_string_array_schema( 'Border radius preset slugs from theme.json or custom tokens.' ),
+			'layout'             => array(
 				'type'        => 'object',
 				'description' => 'The compiled theme.json layout settings.',
 			),
-			'custom'        => array(
+			'custom'             => array(
 				'type'        => 'object',
 				'description' => 'Custom theme.json settings.',
 			),
 		),
-		'required'   => array( 'colors', 'gradients', 'spacing', 'font_sizes', 'font_families', 'shadows', 'border_radius', 'layout', 'custom' ),
+		'required'   => array( 'token_source', 'theme_json_version', 'colors', 'gradients', 'duotone', 'spacing', 'font_sizes', 'font_families', 'shadows', 'border_radius', 'layout', 'custom' ),
 	);
 
 	$abilities = array(
