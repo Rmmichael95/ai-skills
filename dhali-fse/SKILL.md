@@ -281,7 +281,8 @@ Before running broad discovery, check for a project context cache.
 ### Preferred lookup order
 
 ```sh
-test -f "$WP_ROOT/context.md" && cat "$WP_ROOT/context.md"
+# Prefer the canonical context.md written by dhali/sync-context, but support legacy project_slug_context.md.
+find "$WP_ROOT" -maxdepth 1 -type f \( -name 'context.md' -o -name '*_context.md' \) | sort | head -1 | xargs -r cat
 test -f "./context.md" && cat "./context.md"
 test -d "$HOME/pictures/blocks" && find "$HOME/pictures/blocks" -maxdepth 2 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.svg' \) | sort
 ```
@@ -366,6 +367,7 @@ Authoring-rule lint shape:
 {
   "ability_name": "dhali/lint-pattern-authoring-rules",
   "parameters": {
+    "request": "lint_pattern_authoring_rules",
     "markup": "BLOCK_MARKUP_HERE",
     "context": "standalone"
   }
@@ -389,6 +391,7 @@ Editor-context test shape:
 {
   "ability_name": "dhali/test-pattern-in-editor-context",
   "parameters": {
+    "request": "test_pattern_in_editor_context",
     "markup": "BLOCK_MARKUP_HERE",
     "post_type": "page",
     "context": "standalone"
@@ -403,7 +406,7 @@ If any check fails, report the failure, fix the file, and rerun the failed check
 - Do not place placeholder comments inside `<svg>` markup in final saved block content.
 - Do not leave truncated class names, broken JSON, wrapped line fragments, or placeholder paths in final block markup.
 - Custom SVG icon blocks must include the saved `<!-- wp:outermost/icon-block ... -->` wrapper and matching closing comment.
-- If the real SVG path data is unavailable, ask for the SVG before writing the file.
+- If exact SVG path data is unavailable, do not ask the user for path data. Use the closest local/MCP icon asset or author a simple editor-safe `core/html` SVG approximation and note it in the proposal.
 - Keep generated PHP strings intact; avoid line wrapping that splits JSON keys, class names, or CSS variable names.
 
 ## Pattern Authoring Safety MCP Tools
@@ -416,9 +419,11 @@ Run whenever the pattern includes image cards, covers, icons, generated SVG, cus
 - `id:0` or `wp-image-0` in saved markup.
 - Remote placeholder image URLs (`picsum.photos`, `placehold.co`, `placeholder.com`, `loremflickr.com`, `dummyimage.com`).
 - Generated block-level `style.css` such as `"css":"overflow:hidden;"`.
-- Generated `outermost/icon-block` custom SVG markup.
+- Malformed or guessed `outermost/icon-block` custom SVG scaffold.
 - Empty SVG shells for named icons.
 - `iconColorValue` or `iconBackgroundColorValue` using CSS variables instead of resolved hex values.
+- Synthesized `core/group` link attributes such as `href`, `linkDestination`, or `animationType`.
+- Manual layout CSS on `core/group` wrappers such as `width`, `display:flex`, `align-items`, or `justify-content` when not copied from a known editor snippet.
 - Unknown Ollie token slugs.
 - Wrapped or truncated CSS variable names or class names.
 - `has-custom-font-size` without a matching `style.typography.fontSize` custom value.
@@ -431,8 +436,9 @@ Call before writing any pattern that references images. Returns available filena
 
 Use before composing fragile blocks. Prefer these snippets over inventing markup for:
 
-- Plus-circle CTAs as native linked `core/group` + known-good icon block (`plus-cta-linked-group-icon`).
-- Known-good copied Outermost/Ollie icons with full SVG paths.
+- Plus-circle CTAs as serializer-safe `core/buttons`/`core/button` markup (`plus-cta-circle-button`).
+- Known-good copied Outermost/Ollie named icons with full SVG paths.
+- Known-good custom Outermost/Ollie SVG icon scaffolds (`outermost-custom-svg-icon`) where only the inner SVG is replaced.
 - Editor-safe Cover snippets.
 - Simple Ollie button examples.
 
@@ -442,21 +448,23 @@ Allowed:
 
 1. Ollie/editor-copied `core/buttons` + `core/button` markup.
 2. `core/button` using known Ollie classes: `is-style-fill`, `is-style-button-light`, `is-style-secondary-button`.
-3. Linked `core/group` + known-good `outermost/icon-block` when the editor supports `href`, `linkDestination`, `animationType`.
+3. Exact editor-saved linked-group snippets only when copied from the current editor or returned by MCP. Do not synthesize linked group behavior.
 4. Plain paragraph links for simple text CTAs.
 
 Avoid:
 
-- Generated custom plus `core/button` markup assembled from memory.
+- Generated custom linked `core/group` markup assembled from memory.
+- `core/group` with guessed `href`, `linkDestination`, or `animationType` attributes.
+- Manual wrapper styles on `core/group` such as `width`, `display:flex`, `align-items`, or `justify-content` unless the snippet is exact editor-saved markup.
 - `core/html` as a default CTA solution.
 
-For circular plus CTAs, fetch `dhali/get-editor-safe-block-snippets` and copy `plus-cta-linked-group-icon` exactly.
+For circular plus CTAs, fetch `dhali/get-editor-safe-block-snippets` and copy `plus-cta-circle-button` exactly unless the user supplies exact editor-saved linked-group markup.
 
 ### Plus CTA safety rule
 
-1. Prefer the `plus-cta-linked-group-icon` snippet from `dhali/get-editor-safe-block-snippets`.
-2. Preserve the linked group wrapper, `href`, `linkDestination`, `animationType`, padding, radius, icon wrapper, `wordpress-plus` icon name, width, and saved SVG path exactly.
-3. Use `core/button` only when exact saved button markup was copied from the current WordPress editor.
+1. Prefer the `plus-cta-circle-button` snippet from `dhali/get-editor-safe-block-snippets` because it uses serializer-stable core button markup.
+2. Do not replace the CTA with a bare icon block. A plus CTA is a composed control: CTA wrapper + clickable element + visual plus.
+3. Use a linked `core/group` CTA only when the entire group scaffold is exact editor-saved markup. Never add `href`, `linkDestination`, or `animationType` to `core/group` from memory.
 4. Use `core/html` only as a temporary diagnostic fallback when explicitly requested.
 
 ### `dhali/test-pattern-in-editor-context`
@@ -484,11 +492,13 @@ The WordPress editor serializer is the source of truth for Ollie/Outermost icon 
 
 ### Hard rule
 
-Do not generate custom `outermost/icon-block` SVG markup from scratch. Use `outermost/icon-block` only when:
+Do not guess third-party block serialization. Use `outermost/icon-block` only when one of these is true:
 
 1. The exact saved icon block markup was copied from the WordPress editor.
 2. The snippet comes from `dhali/get-editor-safe-block-snippets` or `dhali/get-icon-manifest`.
 3. The user provides a known-good saved block snippet.
+
+A named Outermost icon, a custom SVG Outermost icon, and a CTA icon are different scaffold families. Do not adapt one family into another.
 
 ### Editor-saved values must stay editor-saved
 
@@ -504,7 +514,13 @@ Named Outermost/Ollie icons must include the saved SVG path. Do not output an em
 
 ### Custom SVG rule
 
-For AI-generated decorative SVGs with no editor-safe snippet available:
+For custom decorative SVGs, choose this path:
+
+1. If MCP returns `outermost-custom-svg-icon`, use that exact scaffold and replace only the inner `<svg>...</svg>` while preserving both wrapper divs, `iconName:""`, width, and transform style.
+2. If there is no trusted Outermost custom SVG scaffold, use `core/html` for the decorative SVG.
+3. Never adapt a named icon snippet into a custom SVG snippet.
+
+Safe `core/html` fallback:
 
 ```html
 <!-- wp:html -->
@@ -540,6 +556,67 @@ find "$HOME/pictures/blocks" -maxdepth 2 -type f \
 	\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.svg' \) |
 	sort
 ```
+
+## Screenshot Fidelity Rules
+
+When recreating a screenshot, prioritize in this order:
+
+1. Block hierarchy and semantic structure.
+2. Relative order of elements.
+3. CTA type and interaction shape.
+4. Icon/media presence and approximate style.
+5. Spacing/proportion.
+6. Typography exactness.
+
+Do not over-optimize exact dimensions, font rendering, or card width when the pattern will flow inside the editor/page layout. Preserve the structure first.
+
+### SVG / Icon Recreation Rule
+
+Do not ask the user to provide SVG path data when recreating a screenshot. If the exact icon is unavailable, use this order:
+
+1. Existing local theme/plugin SVG or image asset.
+2. MCP icon manifest / editor-safe icon snippet, including `outermost-custom-svg-icon` when an Outermost custom SVG block is desired.
+3. Simple inline `core/html` SVG approximation authored by the agent.
+4. Plain text/icon fallback only if SVG is not appropriate.
+
+The proposal may state that the icon is an approximation, but missing exact SVG data is not a blocker.
+
+Screenshot-derived one-off SVG fills and CTA colors may use sampled hex values only when no matching Ollie token exists. Keep those hex values local to the SVG/CTA and do not turn them into global tokens.
+
+### Circular CTA Rule
+
+If the source design shows a small circular CTA, the background color belongs only to the clickable circular control. It must not become a full-width yellow bar.
+
+Use `plus-cta-circle-button` unless the user provides exact editor-saved linked-group markup. Do not place a bare `outermost/icon-block` at the bottom and call it a CTA; it must be a clickable control.
+
+### Core Group Wrapper Style Rule
+
+Do not inject manual layout CSS into the saved wrapper `<div>` for `core/group` unless the exact markup came from the editor. Avoid wrapper styles such as `width`, `display:flex`, `align-items`, and `justify-content` because they are not reliably reproduced by the core/group serializer. Express layout through block attributes/classes or use a real `core/button`.
+
+### MCP Reconnect Resume Rule
+
+After any MCP disconnect/reconnect during authoring, stop and restate the current implementation checkpoint before writing or validating:
+
+- target file
+- source screenshot/reference
+- selected block structure
+- icon strategy
+- CTA strategy
+- validation sequence
+
+Do not continue from memory alone if any checkpoint item is missing. Recover it from the prior proposal or stop before writing.
+
+## Ability Design Notes for Dhali MCP
+
+Design abilities as small, explicit API surfaces.
+
+- Register ability categories on `wp_abilities_api_categories_init` and abilities on `wp_abilities_api_init`.
+- Every ability must have `execute_callback`, `permission_callback`, `input_schema`, `output_schema`, and MCP/REST metadata.
+- Prefer read-only abilities. Split write/preview actions from read-only validation where possible.
+- Do not run shell commands from MCP callbacks; keep PHP lint in the local CLI workflow.
+- Return schema-valid arrays or `WP_Error` objects. Catch exceptions and report structured errors.
+- No-parameter abilities should either use a simple required `request` enum or a schema that avoids fragile empty `properties` objects.
+- Flexible object schemas must explicitly allow `additionalProperties` when the payload is intentionally open-ended.
 
 ## Code Boilerplate and Patterns
 
@@ -641,7 +718,7 @@ wp-content/plugins/dhali-pattern-library/patterns/{pattern-name}.php
 
 ### 4. PHP/HTML Payload
 
-Provide the complete PHP return array or HTML template content.
+For small/simple patterns, provide the complete PHP return array or HTML template content. For complex PHP patterns, avoid pasting a full payload unless the user explicitly asks; show the exact destination, the block tree, and a representative non-wrapped snippet instead. Full payloads are easy to line-wrap in terminal UIs and can corrupt WordPress block JSON.
 
 Rules:
 
@@ -654,6 +731,16 @@ Rules:
 - Use tabs for PHP array indentation.
 - Do not write the file until the user explicitly says `Approved`.
 
+## Small Repair Fast Path
+
+For an existing pattern repair where the user requests a narrow visual or markup fix:
+
+1. Run MCP discovery plus one cheap execute sanity check.
+2. Read only the target pattern file and the relevant small surrounding block.
+3. Do not fetch project snapshot, token map, local assets, icon manifest, or snippets unless the edit requires them.
+4. Make the smallest safe edit.
+5. Run validation sequentially.
+
 ## Post-Approval Write and Validation Workflow
 
 After the user explicitly says `Approved`:
@@ -663,13 +750,27 @@ After the user explicitly says `Approved`:
 3. Run one cheap MCP execute sanity check: `dhali/get-pattern-template-skeleton` or `dhali/get-editor-safe-block-snippets`.
 4. If any validation ability is unavailable or execute fails, stop before writing and ask the user to reconnect MCP.
 5. Write the PHP pattern file only after MCP validation availability and execute sanity are confirmed.
-6. Run PHP lint on the written file.
+6. Run PHP lint on the written file outside MCP.
 7. Extract the generated block markup from the `content` string.
-8. Execute `dhali/lint-pattern-authoring-rules`.
-9. Execute `dhali/validate-pattern-markup`.
-10. Execute `dhali/test-pattern-in-editor-context`.
-11. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present only for known-good editor-saved snippets, and verify every SVG contains real path elements.
-12. Report all check results. Only say the pattern is ready when all checks pass. Do not skip validation for speed.
+8. Execute `dhali/lint-pattern-authoring-rules` sequentially.
+9. Execute `dhali/validate-pattern-markup` sequentially.
+10. Execute `dhali/test-pattern-in-editor-context` sequentially.
+11. Treat this ability as a preview-draft check unless it explicitly returns `editor_invalid_content_checked: true` and no recovery warning was found. A returned edit URL means `preview_ready`, not `ready`.
+12. Never run MCP validation abilities in parallel. If a validation ability returns a server error or MCP disconnects, retry that ability once only. If it still fails, stop and report `written_but_not_validated`. Do not probe with unrelated/minimal payloads unless the user asks to debug MCP itself.
+13. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present only for known-good editor-saved snippets, and verify every SVG contains real path elements.
+14. Report all check results. Only say the pattern is ready when automated browser/editor validation or user visual review confirms there is no “Block contains unexpected or invalid content” recovery warning.
+
+## Final Status Labels
+
+Use one of these exact statuses after write attempts:
+
+- `preview_ready`: PHP lint and MCP checks passed and an editor draft URL exists, but editor recovery warnings have not been checked.
+- `ready`: all required checks passed and browser/manual editor review confirms no invalid-content recovery warning.
+- `written_but_not_validated`: file exists and PHP lint may pass, but one or more MCP validations did not complete.
+- `failed_validation`: validation ran and found a markup or authoring-rule issue.
+- `not_written`: stopped before file write.
+
+Do not say a pattern is ready unless the status is `ready`. Use `preview_ready` after `dhali/test-pattern-in-editor-context` creates a draft but no one has checked the editor UI yet.
 
 ## Quality Checklist
 
