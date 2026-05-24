@@ -8,6 +8,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// ─── Schema helpers ──────────────────────────────────────────────────────────
+
 /**
  * Shared MCP metadata for public tools.
  *
@@ -75,11 +77,12 @@ function dhali_mcp_string_array_schema( $description ) {
 	);
 }
 
+// ─── Array utilities ─────────────────────────────────────────────────────────
+
 /**
  * Collect unique string values for a key from a nested array.
  *
- * This handles theme.json settings that may be grouped by origin, for example:
- * settings.color.palette.theme, settings.color.palette.default, etc.
+ * Handles theme.json settings grouped by origin (theme, default, etc.).
  *
  * @param mixed  $value Nested value.
  * @param string $key   Key to collect.
@@ -103,9 +106,7 @@ function dhali_mcp_collect_values_by_key( $value, $key = 'slug' ) {
 		}
 	}
 
-	$values = array_values( array_unique( $values ) );
-
-	return $values;
+	return array_values( array_unique( $values ) );
 }
 
 /**
@@ -132,6 +133,10 @@ function dhali_mcp_array_get( $array, $path ) {
 /**
  * Merge slugs from multiple theme settings paths.
  *
+ * Reads from raw theme.json only — intentionally avoids merging wp_get_global_settings()
+ * or WP_Theme_JSON_Resolver output to prevent WordPress core presets (numeric spacing,
+ * Inter/Cardo fonts, core palette) from bleeding into pattern token references.
+ *
  * @param array<int|string, mixed>       $settings        Theme settings from WP_Theme_JSON_Resolver.
  * @param array<int|string, mixed>       $global_settings Settings from wp_get_global_settings().
  * @param array<int|string, mixed>       $raw_settings    Settings from active theme.json.
@@ -142,31 +147,21 @@ function dhali_mcp_collect_token_slugs_from_paths( $settings, $global_settings, 
 	$slugs = array();
 
 	foreach ( $paths as $path ) {
-		/*
-		 * Canonical design tokens for pattern authoring must come from the
-		 * active theme's raw theme.json only. Do not merge wp_get_global_settings()
-		 * or WP_Theme_JSON_Resolver output here because those can include WordPress
-		 * default/core presets such as numeric spacing, Inter/Cardo fonts, and core
-		 * palette colors.
-		 */
 		$slugs = array_merge( $slugs, dhali_mcp_collect_values_by_key( dhali_mcp_array_get( $raw_settings, $path ), 'slug' ) );
 	}
 
 	return array_values( array_unique( array_filter( $slugs ) ) );
 }
 
+// ─── Theme data ───────────────────────────────────────────────────────────────
+
 /**
  * Read active theme theme.json directly.
- *
- * This provides a fast canonical fallback when compiled/global settings are
- * origin-grouped or transformed by WordPress internals.
  *
  * @return array{source: string, version: string, settings: array<string, mixed>}
  */
 function dhali_mcp_get_raw_theme_json_settings_data() {
-	$paths = array(
-		trailingslashit( get_stylesheet_directory() ) . 'theme.json',
-	);
+	$paths = array( trailingslashit( get_stylesheet_directory() ) . 'theme.json' );
 
 	$template_path = trailingslashit( get_template_directory() ) . 'theme.json';
 	if ( ! in_array( $template_path, $paths, true ) ) {
@@ -202,7 +197,7 @@ function dhali_mcp_get_raw_theme_json_settings_data() {
 /**
  * Get merged/global theme settings with safe fallbacks.
  *
- * @return array{settings: array<string, mixed>, global_settings: array<string, mixed>}
+ * @return array{settings: array<string, mixed>, global_settings: array<string, mixed>, raw_settings: array<string, mixed>, token_source: string, theme_json_version: string}
  */
 function dhali_mcp_get_theme_settings_data() {
 	$settings        = array();
@@ -229,6 +224,7 @@ function dhali_mcp_get_theme_settings_data() {
 		'theme_json_version' => $raw_theme_json['version'],
 	);
 }
+
 /**
  * Return a compact project snapshot.
  *
@@ -239,8 +235,8 @@ function dhali_mcp_get_project_snapshot_data() {
 	$settings_data = dhali_mcp_get_theme_settings_data();
 	$settings      = $settings_data['settings'];
 	$global        = $settings_data['global_settings'];
-	$layout        = dhali_mcp_array_get( $global, array( 'layout' ) );
 
+	$layout = dhali_mcp_array_get( $global, array( 'layout' ) );
 	if ( ! is_array( $layout ) ) {
 		$layout = dhali_mcp_array_get( $settings, array( 'layout' ) );
 	}
@@ -251,7 +247,6 @@ function dhali_mcp_get_project_snapshot_data() {
 		'active_theme'    => $theme->get( 'Name' ),
 		'theme_slug'      => get_stylesheet(),
 		'template'        => get_template(),
-		'stylesheet'      => get_stylesheet(),
 		'is_child_theme'  => get_template() !== get_stylesheet(),
 		'layout_defaults' => is_array( $layout ) ? $layout : array(),
 	);
@@ -285,74 +280,42 @@ function dhali_mcp_get_token_and_layout_data() {
 	}
 
 	$colors = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
-		array(
-			array( 'color', 'palette' ),
-		)
+		$settings, $global, $raw,
+		array( array( 'color', 'palette' ) )
 	);
 
 	$gradients = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
-		array(
-			array( 'color', 'gradients' ),
-		)
+		$settings, $global, $raw,
+		array( array( 'color', 'gradients' ) )
 	);
 
 	$duotone = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
-		array(
-			array( 'color', 'duotone' ),
-		)
+		$settings, $global, $raw,
+		array( array( 'color', 'duotone' ) )
 	);
 
 	$spacing = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
-		array(
-			array( 'spacing', 'spacingSizes' ),
-			array( 'spacing', 'spacingScale' ),
-		)
+		$settings, $global, $raw,
+		array( array( 'spacing', 'spacingSizes' ), array( 'spacing', 'spacingScale' ) )
 	);
 
 	$font_sizes = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
-		array(
-			array( 'typography', 'fontSizes' ),
-		)
+		$settings, $global, $raw,
+		array( array( 'typography', 'fontSizes' ) )
 	);
 
 	$font_families = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
-		array(
-			array( 'typography', 'fontFamilies' ),
-		)
+		$settings, $global, $raw,
+		array( array( 'typography', 'fontFamilies' ) )
 	);
 
 	$shadows = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
-		array(
-			array( 'shadow', 'presets' ),
-			array( 'shadow' ),
-		)
+		$settings, $global, $raw,
+		array( array( 'shadow', 'presets' ), array( 'shadow' ) )
 	);
 
 	$border_radius = dhali_mcp_collect_token_slugs_from_paths(
-		$settings,
-		$global,
-		$raw,
+		$settings, $global, $raw,
 		array(
 			array( 'border', 'radiusSizes' ),
 			array( 'border', 'radius' ),
@@ -361,20 +324,19 @@ function dhali_mcp_get_token_and_layout_data() {
 		)
 	);
 
-	// Some themes store radius tokens as associative custom keys rather than objects with slugs.
+	// Some themes store radius tokens as associative custom keys rather than preset objects.
 	if ( empty( $border_radius ) ) {
-		$custom_radius = dhali_mcp_array_get( $raw, array( 'custom', 'borderRadius' ) );
-		if ( ! is_array( $custom_radius ) ) {
-			$custom_radius = dhali_mcp_array_get( $settings, array( 'custom', 'borderRadius' ) );
-		}
-		if ( ! is_array( $custom_radius ) ) {
-			$custom_radius = dhali_mcp_array_get( $raw, array( 'custom', 'border-radius' ) );
-		}
-		if ( ! is_array( $custom_radius ) ) {
-			$custom_radius = dhali_mcp_array_get( $settings, array( 'custom', 'border-radius' ) );
-		}
-		if ( is_array( $custom_radius ) ) {
-			$border_radius = array_values( array_filter( array_keys( $custom_radius ), 'is_string' ) );
+		foreach ( array(
+			array( $raw, array( 'custom', 'borderRadius' ) ),
+			array( $settings, array( 'custom', 'borderRadius' ) ),
+			array( $raw, array( 'custom', 'border-radius' ) ),
+			array( $settings, array( 'custom', 'border-radius' ) ),
+		) as $attempt ) {
+			$custom_radius = dhali_mcp_array_get( $attempt[0], $attempt[1] );
+			if ( is_array( $custom_radius ) ) {
+				$border_radius = array_values( array_filter( array_keys( $custom_radius ), 'is_string' ) );
+				break;
+			}
 		}
 	}
 
@@ -393,6 +355,9 @@ function dhali_mcp_get_token_and_layout_data() {
 		'custom'             => is_array( $custom ) ? $custom : array(),
 	);
 }
+
+// ─── Context helpers ─────────────────────────────────────────────────────────
+
 /**
  * Resolve the project slug for a context filename.
  *
@@ -411,7 +376,7 @@ function dhali_mcp_get_project_slug() {
 
 	$slug = sanitize_title( $slug );
 
-	return '' !== $slug ? $slug : 'WordPress';
+	return '' !== $slug ? $slug : 'wordpress';
 }
 
 /**
@@ -427,11 +392,8 @@ function dhali_mcp_build_context_markdown() {
 	$content .= "## Generated\n\n";
 	$content .= '- Date/time: ' . gmdate( 'Y-m-d H:i:s' ) . " UTC\n";
 	$content .= '- WordPress root: ' . untrailingslashit( ABSPATH ) . "\n";
-	$content .= '- Token source: MCP dhali/get-token-and-layout-map' . "\n";
-	$content .= '- Canonical token scope: active theme theme.json only' . "\n";
-	$content .= '- Token data source: ' . $tokens['token_source'] . "\n";
-	$content .= '- theme.json version: ' . $tokens['theme_json_version'] . "\n";
-	$content .= '- Fallbacks used: none' . "\n\n";
+	$content .= '- Token source: ' . $tokens['token_source'] . "\n";
+	$content .= '- theme.json version: ' . $tokens['theme_json_version'] . "\n\n";
 
 	$content .= "## WordPress Runtime\n\n";
 	$content .= '- Core version: ' . $snapshot['core_version'] . "\n";
@@ -439,7 +401,6 @@ function dhali_mcp_build_context_markdown() {
 	$content .= '- Active theme: ' . $snapshot['active_theme'] . "\n";
 	$content .= '- Theme slug: ' . $snapshot['theme_slug'] . "\n";
 	$content .= '- Template: ' . $snapshot['template'] . "\n";
-	$content .= '- Stylesheet: ' . $snapshot['stylesheet'] . "\n";
 	$content .= '- Child theme: ' . ( $snapshot['is_child_theme'] ? 'yes' : 'no' ) . "\n\n";
 
 	$content .= "## Layout\n\n";
@@ -465,6 +426,7 @@ function dhali_mcp_build_context_markdown() {
 	return $content;
 }
 
+// ─── Lint helpers ─────────────────────────────────────────────────────────────
 
 /**
  * Build an issue object for pattern authoring lint.
@@ -497,7 +459,6 @@ function dhali_mcp_issue_counts( $issues ) {
 
 	foreach ( $issues as $issue ) {
 		$severity = isset( $issue['severity'] ) ? $issue['severity'] : 'info';
-
 		if ( isset( $counts[ $severity ] ) ) {
 			++$counts[ $severity ];
 		}
@@ -570,12 +531,7 @@ function dhali_mcp_lint_token_references( $markup ) {
 			$issues[] = dhali_mcp_pattern_issue(
 				'error',
 				'unknown_theme_token',
-				sprintf(
-					'Unknown %s preset slug "%s" in %s.',
-					$category,
-					$slug,
-					$reference['raw']
-				)
+				sprintf( 'Unknown %s preset slug "%s" in %s.', $category, $slug, $reference['raw'] )
 			);
 		}
 	}
@@ -586,16 +542,18 @@ function dhali_mcp_lint_token_references( $markup ) {
 /**
  * Apply Dhali/Ollie authoring lint rules to proposed block markup.
  *
- * This is intentionally stricter than parse_blocks(). It catches project-specific
+ * Intentionally stricter than parse_blocks(). Catches project-specific
  * editor-safety risks before a pattern is written or inserted.
  *
- * @param string $markup Block markup.
+ * @param string $markup  Block markup.
  * @param string $context Pattern context: standalone, query_loop, post_template, template_part.
  * @return array<string, mixed>
  */
 function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 	$issues  = array();
 	$context = is_string( $context ) && '' !== $context ? $context : 'standalone';
+
+	// ── Structural checks ──────────────────────────────────────────────────
 
 	if ( '' === trim( $markup ) ) {
 		$issues[] = dhali_mcp_pattern_issue( 'error', 'empty_markup', 'Markup is empty.' );
@@ -609,19 +567,32 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		$issues[] = dhali_mcp_pattern_issue( 'error', 'block_comment_mismatch', 'Opening and closing block comment counts do not match.' );
 	}
 
-	if ( preg_match( '/"useFeaturedImage"\s*:\s*true/', $markup ) && ! in_array( $context, array( 'query_loop', 'post_template' ), true ) ) {
+	if ( preg_match( '/\bwp--preset--[a-z-]*-\s/', $markup ) || preg_match( '/has-[a-z-]*-\s/', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue( 'error', 'wrapped_or_truncated_identifier', 'Markup appears to contain a wrapped or truncated CSS variable or class name.' );
+	}
+
+	// ── Class consistency checks ───────────────────────────────────────────
+
+	// FIX: has-custom-font-size is only valid when style.typography.fontSize (a custom
+	// value) is set. With a preset fontSize slug it must not appear — doing so causes a
+	// JS serializer mismatch and "Block contains unexpected or invalid content" in the editor.
+	if ( preg_match( '/has-custom-font-size/', $markup ) &&
+		! preg_match( '/"style"\s*:\s*\{[^{}]*"typography"\s*:\s*\{[^{}]*"fontSize"/', $markup ) ) {
 		$issues[] = dhali_mcp_pattern_issue(
 			'error',
-			'no_dynamic_featured_image_in_standalone_pattern',
-			'Do not use useFeaturedImage:true for standalone screenshot-based patterns. Use a static image/cover or a post-context pattern explicitly.'
+			'invalid_custom_font_size_class',
+			'has-custom-font-size is present without a style.typography.fontSize value. WordPress only generates this class for custom (non-preset) font sizes. Remove it when using a preset fontSize slug such as "base" — use has-{slug}-font-size only.'
 		);
 	}
 
-	if ( preg_match( '/"css"\s*:\s*"/', $markup ) ) {
+	// ── Media / image checks ───────────────────────────────────────────────
+
+	if ( preg_match( '/"useFeaturedImage"\s*:\s*true/', $markup ) &&
+		! in_array( $context, array( 'query_loop', 'post_template' ), true ) ) {
 		$issues[] = dhali_mcp_pattern_issue(
 			'error',
-			'no_generated_block_style_css',
-			'Do not use block-level style.css in generated patterns unless it was copied from known-good editor-saved markup. Prefer normal block supports or ask for a known-good snippet.'
+			'no_dynamic_featured_image_in_standalone_pattern',
+			'Do not use useFeaturedImage:true for standalone screenshot-based patterns. Use a static image/cover or label the pattern as a post-template pattern explicitly.'
 		);
 	}
 
@@ -629,7 +600,7 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		$issues[] = dhali_mcp_pattern_issue(
 			'error',
 			'no_zero_media_id',
-			'Do not write image or cover blocks with id:0. Use a real media attachment ID or omit image-id-specific saved classes/attributes.'
+			'Do not write image or cover blocks with id:0. Use a real media attachment ID or omit image-id-specific saved classes and attributes.'
 		);
 	}
 
@@ -645,23 +616,47 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		$issues[] = dhali_mcp_pattern_issue(
 			'error',
 			'no_remote_placeholder_images',
-			'Do not write final generated patterns with remote placeholder image URLs such as picsum.photos. Ask for a real media URL/ID or use an editor-safe no-image placeholder.'
+			'Do not write final generated patterns with remote placeholder image URLs. Ask for a real media URL/ID before writing the final file.'
 		);
 	}
 
-	if ( 'standalone' === $context && preg_match_all( '/<!--\s*wp:(cover|image)\s+(\{.*?\})\s*-->/s', $markup, $media_blocks, PREG_SET_ORDER ) ) {
+	// FIX: Promoted from warning to error — a standalone pattern with a URL but no
+	// attachment ID produces a broken image and eventual wp-image-0 class in the editor.
+	if ( 'standalone' === $context &&
+		preg_match_all( '/<!--\s*wp:(cover|image)\s+(\{.*?\})\s*-->/s', $markup, $media_blocks, PREG_SET_ORDER ) ) {
 		foreach ( $media_blocks as $media_block ) {
 			$block_name = isset( $media_block[1] ) ? $media_block[1] : 'media';
 			$attrs_raw  = isset( $media_block[2] ) ? $media_block[2] : '';
 
 			if ( false !== strpos( $attrs_raw, '"url"' ) && ! preg_match( '/"id"\s*:\s*[1-9][0-9]*/', $attrs_raw ) ) {
 				$issues[] = dhali_mcp_pattern_issue(
-					'warning',
+					'error',
 					'standalone_media_without_attachment_id',
-					sprintf( 'Standalone core/%s uses a URL without a real media attachment id. Prefer a real media URL/id from the project or ask before writing final patterns.', $block_name )
+					sprintf(
+						'Standalone core/%s uses a URL without a real media attachment ID. Ask the user for the media URL and ID before writing the final pattern.',
+						$block_name
+					)
 				);
 			}
 		}
+	}
+
+	// ── Style / serializer safety ──────────────────────────────────────────
+
+	// FIX: Narrowed from matching any "css" attribute to only the specific
+	// overflow:hidden serializer hack. Valid custom CSS block support uses "css" too.
+	if ( preg_match( '/"css"\s*:\s*"[^"]*overflow\s*:\s*hidden/', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'no_overflow_hidden_style_css',
+			'Do not use "css":"overflow:hidden" in generated patterns. Use per-corner border-radius on the block instead.'
+		);
+	}
+
+	// ── Icon / SVG checks ──────────────────────────────────────────────────
+
+	if ( preg_match( '/<svg[^>]*>\s*<!--/', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue( 'error', 'svg_placeholder_comment', 'Do not place placeholder comments inside final SVG markup.' );
 	}
 
 	if ( preg_match_all( '/<!--\s*wp:outermost\/icon-block\b.*?<!--\s*\/wp:outermost\/icon-block\s*-->/s', $markup, $icon_blocks ) ) {
@@ -672,7 +667,7 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 				$issues[] = dhali_mcp_pattern_issue(
 					'error',
 					'outermost_icon_value_fields_must_be_resolved',
-					$label . ' uses iconColorValue/iconBackgroundColorValue with a CSS variable. Use editor-resolved values such as #fbb042 or #ffffff.'
+					$label . ' uses iconColorValue or iconBackgroundColorValue with a CSS variable. Use editor-resolved hex values such as #fbb042 or #ffffff.'
 				);
 			}
 
@@ -680,7 +675,7 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 				$issues[] = dhali_mcp_pattern_issue(
 					'error',
 					'outermost_icon_empty_svg',
-					$label . ' contains an empty SVG shell. Named icons must include the saved SVG path.'
+					$label . ' contains an empty SVG shell. Named icons must include the saved SVG path data.'
 				);
 			}
 
@@ -688,11 +683,12 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 				$issues[] = dhali_mcp_pattern_issue(
 					'error',
 					'outermost_icon_untrusted_name',
-					$label . ' uses an untrusted iconName. Use known-good editor-saved icon slugs such as ollie-phosphor-plus, or use core/button for plus CTAs.'
+					$label . ' uses an untrusted iconName. Use known-good editor-saved icon slugs, or use core/button with text "+" for plus CTAs.'
 				);
 			}
 
-			if ( preg_match( '/"iconName"\s*:\s*""/', $icon_block ) && ! preg_match( '/has-icon-background-color|ollieCustomClasses|className/', $icon_block ) ) {
+			if ( preg_match( '/"iconName"\s*:\s*""/', $icon_block ) &&
+				! preg_match( '/has-icon-background-color|ollieCustomClasses|className/', $icon_block ) ) {
 				$issues[] = dhali_mcp_pattern_issue(
 					'warning',
 					'generated_custom_outermost_icon_risk',
@@ -702,21 +698,17 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		}
 	}
 
-	if ( preg_match( '/<svg[^>]*>\s*<!--/', $markup ) ) {
-		$issues[] = dhali_mcp_pattern_issue( 'error', 'svg_placeholder_comment', 'Do not place placeholder comments inside final SVG markup.' );
-	}
-
-	if ( preg_match( '/\bwp--preset--[a-z-]*-\s/', $markup ) || preg_match( '/has-[a-z-]*-\s/', $markup ) ) {
-		$issues[] = dhali_mcp_pattern_issue( 'error', 'wrapped_or_truncated_identifier', 'Markup appears to contain a wrapped/truncated CSS variable or class name.' );
-	}
+	// ── Custom class checks ────────────────────────────────────────────────
 
 	if ( preg_match( '/"ollieCustomClasses"\s*:\s*\[/', $markup ) ) {
 		$issues[] = dhali_mcp_pattern_issue(
 			'warning',
 			'ollie_custom_classes_need_confirmation',
-			'Markup uses ollieCustomClasses. Preserve only known-good editor classes or classes confirmed in project CSS.'
+			'Markup uses ollieCustomClasses. Preserve only known-good editor classes confirmed in project CSS.'
 		);
 	}
+
+	// ── Token reference validation ─────────────────────────────────────────
 
 	$issues = array_merge( $issues, dhali_mcp_lint_token_references( $markup ) );
 
@@ -730,6 +722,8 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 	);
 }
 
+// ─── Editor-safe snippets data ────────────────────────────────────────────────
+
 /**
  * Known-good snippets and rules for editor-safe block composition.
  *
@@ -738,23 +732,33 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 function dhali_mcp_get_editor_safe_block_snippets_data() {
 	return array(
 		'guidelines' => array(
-			'Generated decorative SVGs should use core/html, not generated outermost/icon-block.',
-			'Circular plus CTAs should use core/buttons plus core/button text "+".',
+			'Generated decorative SVGs must use core/html, not generated outermost/icon-block.',
+			'Circular plus CTAs must use core/buttons + core/button with text "+". Do not use outermost/icon-block for plus buttons.',
 			'Use outermost/icon-block only with known-good editor-saved markup or trusted snippets with full SVG paths.',
 			'Use static core/image or static core/cover for screenshot-matched standalone cards. Use useFeaturedImage:true only in Query Loop or post-template context.',
-			'Final generated patterns must not use id:0, wp-image-0, remote placeholder images, or generated block-level style.css.',
+			'Final generated patterns must not use id:0, wp-image-0, remote placeholder images, or generated overflow:hidden style.css.',
 			'If a screenshot-matched card needs a real image and no media URL/id is known, ask for the asset before writing the final pattern.',
+			'When fontSize is a preset slug (e.g. "base"), the <a> element must have has-{slug}-font-size only. Never add has-custom-font-size alongside a preset fontSize — that causes a JS serializer mismatch.',
 		),
 		'snippets'   => array(
-			'core-html-decorative-svg'         => '<!-- wp:html --><div style="width:56px;line-height:0" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="M28.5 8c2.9 0 5.3 2.4 5.3 5.3s-2.4 5.3-5.3 5.3-5.3-2.4-5.3-5.3S25.6 8 28.5 8Z"></path></svg></div><!-- /wp:html -->',
-			'core-button-plus-circle'          => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} --><div class="wp-block-button"><a class="wp-block-button__link has-text-color has-background has-base-font-size has-custom-font-size wp-element-button" style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem">+</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
-			'outermost-phosphor-minus'         => '<!-- wp:outermost/icon-block {"iconName":"ollie-phosphor-minus","iconColor":"primary","iconColorValue":"#fbb042"} --><div class="wp-block-outermost-icon-block"><div class="icon-container has-icon-color has-primary-color" style="color:#fbb042;width:48px;transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z"></path></svg></div></div><!-- /wp:outermost/icon-block -->',
-			'outermost-phosphor-question-pill' => '<!-- wp:outermost/icon-block {"iconName":"ollie-phosphor-question","iconBackgroundColor":"primary","iconBackgroundColorValue":"#fbb042","iconColor":"base","iconColorValue":"#ffffff","width":"80px","style":{"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}}}} --><div class="wp-block-outermost-icon-block"><div class="icon-container has-icon-color has-icon-background-color has-primary-background-color has-base-color" style="background-color:#fbb042;color:#ffffff;width:80px;border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"></path></svg></div></div><!-- /wp:outermost/icon-block -->',
-			'static-cover-card-note'           => 'For standalone screenshot cards, use core/cover with explicit real media url/id/sizeSlug/img markup. Do not use useFeaturedImage:true unless in Query Loop or post template context. Never use id:0, wp-image-0, picsum/photos placeholders, or generated style.css overflow clipping in final patterns.',
-			'static-image-card-note'           => 'Use core/image for ordinary screenshot-matched featured images when no overlay content is required.',
+
+			// FIX: Removed has-custom-font-size. WordPress core/button save() only adds
+			// has-custom-font-size when style.typography.fontSize (a custom value) is set.
+			// With a preset fontSize slug it generates has-{slug}-font-size only.
+			'plus-cta-button'                  => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} --><div class="wp-block-button"><a class="wp-block-button__link has-text-color has-background has-base-font-size wp-element-button" style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem">+</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
+
+			'custom-svg-via-core-html'         => '<!-- wp:html --><div style="width:56px;line-height:0" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="M32 8 a24 24 0 1 1 0 48 a24 24 0 0 1 0-48 z"></path></svg></div><!-- /wp:html -->',
+
+			'card-with-shadow'                 => '<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} --><div class="wp-block-group has-base-background-color has-background" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)"></div><!-- /wp:group -->',
+
+			'static-cover-card-note'           => 'For standalone screenshot cards: use core/cover with explicit real media url, id (integer > 0), sizeSlug, and saved <img> markup. Never use useFeaturedImage:true outside Query Loop or post template context. Never use id:0, wp-image-0, placeholder image URLs, or overflow:hidden style.css.',
+
+			'static-image-card-note'           => 'Use core/image for ordinary screenshot-matched featured images when no overlay content is required. Provide a real attachment ID.',
 		),
 	);
 }
+
+// ─── Ability registration ─────────────────────────────────────────────────────
 
 /**
  * Register Dhali MCP abilities.
@@ -781,63 +785,65 @@ function dhali_register_mcp_abilities() {
 			'font_families'      => dhali_mcp_string_array_schema( 'Font family preset slugs from theme.json.' ),
 			'shadows'            => dhali_mcp_string_array_schema( 'Shadow preset slugs from theme.json.' ),
 			'border_radius'      => dhali_mcp_string_array_schema( 'Border radius preset slugs from theme.json or custom tokens.' ),
-			'layout'             => array(
-				'type'        => 'object',
-				'description' => 'The compiled theme.json layout settings.',
-			),
-			'custom'             => array(
-				'type'        => 'object',
-				'description' => 'Custom theme.json settings.',
-			),
+			'layout'             => array( 'type' => 'object', 'description' => 'The compiled theme.json layout settings.' ),
+			'custom'             => array( 'type' => 'object', 'description' => 'Custom theme.json settings.' ),
 		),
 		'required'   => array( 'token_source', 'theme_json_version', 'colors', 'gradients', 'duotone', 'spacing', 'font_sizes', 'font_families', 'shadows', 'border_radius', 'layout', 'custom' ),
 	);
 
+	$lint_issue_schema = array(
+		'type'  => 'array',
+		'items' => array(
+			'type'       => 'object',
+			'properties' => array(
+				'severity' => dhali_mcp_string_schema( 'Issue severity: error, warning, or info.' ),
+				'rule'     => dhali_mcp_string_schema( 'Rule identifier.' ),
+				'message'  => dhali_mcp_string_schema( 'Human-readable issue message.' ),
+			),
+		),
+	);
+
 	$abilities = array(
-		'dhali/get-site-info'                  => array(
+
+		// ── dhali/get-site-info ──────────────────────────────────────────────
+		// FIX: Removed duplicate `stylesheet` field (identical to `active_theme_slug`).
+		'dhali/get-site-info' => array(
 			'label'               => 'Get site info',
 			'description'         => 'Returns the WordPress site title and active theme information.',
 			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema(
-				'site_info',
-				'Use "site_info". This exists to avoid empty-parameter execution issues.'
-			),
+			'input_schema'        => dhali_mcp_request_input_schema( 'site_info', 'Use "site_info".' ),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
 					'site_title'        => dhali_mcp_string_schema( 'The WordPress site title.' ),
 					'active_theme_name' => dhali_mcp_string_schema( 'The active theme display name.' ),
 					'active_theme_slug' => dhali_mcp_string_schema( 'The active stylesheet/theme slug.' ),
-					'template'          => dhali_mcp_string_schema( 'The parent template slug.' ),
-					'stylesheet'        => dhali_mcp_string_schema( 'The active stylesheet slug.' ),
+					'template'          => dhali_mcp_string_schema( 'The parent template slug (same as active_theme_slug unless child theme).' ),
+					'is_child_theme'    => array( 'type' => 'boolean', 'description' => 'Whether the active theme is a child theme.' ),
 				),
-				'required'   => array( 'site_title', 'active_theme_name', 'active_theme_slug', 'template', 'stylesheet' ),
+				'required'   => array( 'site_title', 'active_theme_name', 'active_theme_slug', 'template', 'is_child_theme' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
 				$theme = wp_get_theme();
-
 				return array(
 					'site_title'        => get_bloginfo( 'name' ),
 					'active_theme_name' => $theme->get( 'Name' ),
 					'active_theme_slug' => get_stylesheet(),
 					'template'          => get_template(),
-					'stylesheet'        => get_stylesheet(),
+					'is_child_theme'    => get_template() !== get_stylesheet(),
 				);
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
-		'dhali/get-project-snapshot'           => array(
+		// ── dhali/get-project-snapshot ───────────────────────────────────────
+		// FIX: Removed duplicate `stylesheet` field (identical to `theme_slug`).
+		'dhali/get-project-snapshot' => array(
 			'label'               => 'Get project snapshot',
 			'description'         => 'Returns a compact WordPress environment snapshot and layout defaults.',
 			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema(
-				'project_snapshot',
-				'Use "project_snapshot". This exists to avoid empty-parameter execution issues.'
-			),
+			'input_schema'        => dhali_mcp_request_input_schema( 'project_snapshot', 'Use "project_snapshot".' ),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -846,96 +852,108 @@ function dhali_register_mcp_abilities() {
 					'active_theme'    => dhali_mcp_string_schema( 'The active theme display name.' ),
 					'theme_slug'      => dhali_mcp_string_schema( 'The active stylesheet/theme slug.' ),
 					'template'        => dhali_mcp_string_schema( 'The parent template slug.' ),
-					'stylesheet'      => dhali_mcp_string_schema( 'The active stylesheet slug.' ),
-					'is_child_theme'  => array(
-						'type'        => 'boolean',
-						'description' => 'Whether the active theme is a child theme.',
-					),
-					'layout_defaults' => array(
-						'type'        => 'object',
-						'description' => 'The compiled theme.json layout settings.',
-					),
+					'is_child_theme'  => array( 'type' => 'boolean', 'description' => 'Whether the active theme is a child theme.' ),
+					'layout_defaults' => array( 'type' => 'object', 'description' => 'The compiled theme.json layout settings.' ),
 				),
-				'required'   => array( 'core_version', 'php_version', 'active_theme', 'theme_slug', 'template', 'stylesheet', 'is_child_theme', 'layout_defaults' ),
+				'required'   => array( 'core_version', 'php_version', 'active_theme', 'theme_slug', 'template', 'is_child_theme', 'layout_defaults' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
 				return dhali_mcp_get_project_snapshot_data();
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
-		'dhali/get-token-and-layout-map'       => array(
+		// ── dhali/get-token-and-layout-map ───────────────────────────────────
+		'dhali/get-token-and-layout-map' => array(
 			'label'               => 'Get token and layout map',
 			'description'         => 'Returns canonical active-theme theme.json preset slugs and layout settings.',
 			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema(
-				'token_and_layout_map',
-				'Use "token_and_layout_map". This exists to avoid empty-parameter execution issues.'
-			),
+			'input_schema'        => dhali_mcp_request_input_schema( 'token_and_layout_map', 'Use "token_and_layout_map".' ),
 			'output_schema'       => $token_output_schema,
 			'execute_callback'    => function ( $input = array() ) {
 				return dhali_mcp_get_token_and_layout_data();
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
-		'dhali/get-pattern-template-skeleton'  => array(
+		// ── dhali/get-pattern-template-skeleton ──────────────────────────────
+		// FIX: Now returns the active plugin and patterns paths so the agent
+		// knows the write destination without guessing or scanning.
+		'dhali/get-pattern-template-skeleton' => array(
 			'label'               => 'Get pattern template skeleton',
-			'description'         => 'Returns the standard PHP return-array skeleton for Dhali block patterns.',
+			'description'         => 'Returns the standard PHP return-array skeleton and write paths for Dhali block patterns.',
 			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema(
-				'pattern_template_skeleton',
-				'Use "pattern_template_skeleton" to fetch the standard Dhali pattern return-array skeleton.'
-			),
+			'input_schema'        => dhali_mcp_request_input_schema( 'pattern_template_skeleton', 'Use "pattern_template_skeleton".' ),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
-					'title'         => dhali_mcp_string_schema( 'Pattern title placeholder.' ),
 					'categories'    => dhali_mcp_string_array_schema( 'Default pattern categories.' ),
-					'description'   => dhali_mcp_string_schema( 'Pattern description placeholder.' ),
 					'keywords'      => dhali_mcp_string_array_schema( 'Default pattern keyword placeholders.' ),
-					'viewportWidth' => array(
-						'type'        => 'integer',
-						'description' => 'Default preview viewport width.',
-					),
+					'viewportWidth' => array( 'type' => 'integer', 'description' => 'Default preview viewport width.' ),
 					'blockTypes'    => dhali_mcp_string_array_schema( 'Default block type associations.' ),
-					'content'       => dhali_mcp_string_schema( 'Pattern block markup placeholder.' ),
+					'plugin_path'   => dhali_mcp_string_schema( 'Absolute path to the dhali-pattern-library plugin directory.' ),
+					'patterns_path' => dhali_mcp_string_schema( 'Absolute path to the patterns subdirectory where PHP files are written.' ),
+					'php_skeleton'  => dhali_mcp_string_schema( 'PHP return-array skeleton for a new pattern file.' ),
 				),
-				'required'   => array( 'title', 'categories', 'description', 'keywords', 'viewportWidth', 'blockTypes', 'content' ),
+				'required'   => array( 'categories', 'keywords', 'viewportWidth', 'blockTypes', 'plugin_path', 'patterns_path', 'php_skeleton' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
+				$plugin_dir    = defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : ( WP_CONTENT_DIR . '/plugins' );
+				$plugin_path   = trailingslashit( $plugin_dir ) . 'Dhali-Pattern-Library';
+				$patterns_path = trailingslashit( $plugin_path ) . 'patterns';
+
+				$php_skeleton = <<<'PHP'
+<?php
+return array(
+	'title'         => __( 'Pattern Title', 'dhali' ),
+	'categories'    => array( 'dhali-web-development', 'card' ),
+	'description'   => _x( 'One sentence describing the pattern.', 'Block pattern description', 'dhali' ),
+	'keywords'      => array( 'keyword', 'section' ),
+	'viewportWidth' => 1000,
+	'blockTypes'    => array( 'core/group' ),
+	'content'       => '
+<!-- wp:group {"layout":{"type":"constrained"}} -->
+<div class="wp-block-group">
+</div>
+<!-- /wp:group -->
+',
+);
+PHP;
+
 				return array(
-					'title'         => '',
 					'categories'    => array( 'dhali-web-development', 'card' ),
-					'description'   => '',
 					'keywords'      => array(),
 					'viewportWidth' => 1000,
 					'blockTypes'    => array( 'core/group' ),
-					'content'       => '',
+					'plugin_path'   => $plugin_path,
+					'patterns_path' => $patterns_path,
+					'php_skeleton'  => $php_skeleton,
 				);
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
-		'dhali/validate-pattern-markup'        => array(
+		// ── dhali/validate-pattern-markup ────────────────────────────────────
+		// FIX: Replaced weak inline string checks + inconsistent format with a call
+		// to dhali_mcp_lint_pattern_markup(). Issues are now structured objects
+		// matching lint-pattern-authoring-rules output. block_count now counts
+		// named blocks only (excludes null/freeform parse_blocks() entries).
+		'dhali/validate-pattern-markup' => array(
 			'label'               => 'Validate pattern markup',
-			'description'         => 'Checks whether a string can be parsed as WordPress block markup.',
+			'description'         => 'Parses WordPress block markup and runs full authoring lint. Returns structured issues matching lint-pattern-authoring-rules output format.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
-					'markup' => array(
+					'markup'  => array( 'type' => 'string', 'description' => 'The WordPress block markup string to validate.' ),
+					'context' => array(
 						'type'        => 'string',
-						'description' => 'The WordPress block markup string to validate.',
+						'description' => 'Pattern context for linting. Defaults to standalone.',
+						'enum'        => array( 'standalone', 'query_loop', 'post_template', 'template_part' ),
+						'default'     => 'standalone',
 					),
 				),
 				'required'             => array( 'markup' ),
@@ -944,41 +962,28 @@ function dhali_register_mcp_abilities() {
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
-					'valid'       => array(
-						'type'        => 'boolean',
-						'description' => 'Whether parse_blocks returned at least one named parsed block and no obvious markup issue was found.',
-					),
-					'block_count' => array(
-						'type'        => 'integer',
-						'description' => 'Number of parsed top-level blocks.',
-					),
-					'block_names' => dhali_mcp_string_array_schema( 'Parsed top-level block names.' ),
-					'issues'      => dhali_mcp_string_array_schema( 'Basic validation issues found.' ),
+					'valid'        => array( 'type' => 'boolean', 'description' => 'True when at least one named block parsed and lint returned zero errors.' ),
+					'block_count'  => array( 'type' => 'integer', 'description' => 'Number of named top-level blocks (excludes null/freeform entries).' ),
+					'block_names'  => dhali_mcp_string_array_schema( 'Parsed top-level block names.' ),
+					'issue_counts' => array( 'type' => 'object', 'description' => 'Lint issue counts by severity.' ),
+					'issues'       => $lint_issue_schema,
 				),
-				'required'   => array( 'valid', 'block_count', 'block_names', 'issues' ),
+				'required'   => array( 'valid', 'block_count', 'block_names', 'issue_counts', 'issues' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
-				$markup = isset( $input['markup'] ) && is_string( $input['markup'] ) ? $input['markup'] : '';
+				$markup  = isset( $input['markup'] ) && is_string( $input['markup'] ) ? $input['markup'] : '';
+				$context = isset( $input['context'] ) && is_string( $input['context'] ) ? $input['context'] : 'standalone';
+
+				$lint   = dhali_mcp_lint_pattern_markup( $markup, $context );
 				$blocks = parse_blocks( $markup );
-				$issues = array();
-
-				if ( '' === trim( $markup ) ) {
-					$issues[] = 'Markup is empty.';
-				}
-
-				if ( false !== strpos( $markup, 'PLACEHOLDER' ) ) {
-					$issues[] = 'Markup contains PLACEHOLDER text.';
-				}
-
-				if ( substr_count( $markup, '<!-- wp:' ) !== substr_count( $markup, '<!-- /wp:' ) ) {
-					$issues[] = 'Opening and closing block comment counts do not match.';
-				}
 
 				$block_names = array_values(
 					array_filter(
 						array_map(
 							function ( $block ) {
-								return isset( $block['blockName'] ) && is_string( $block['blockName'] ) ? $block['blockName'] : '';
+								return isset( $block['blockName'] ) && is_string( $block['blockName'] ) && '' !== $block['blockName']
+									? $block['blockName']
+									: '';
 							},
 							$blocks
 						)
@@ -986,26 +991,26 @@ function dhali_register_mcp_abilities() {
 				);
 
 				return array(
-					'valid'       => ! empty( $block_names ) && empty( $issues ),
-					'block_count' => count( $blocks ),
-					'block_names' => $block_names,
-					'issues'      => $issues,
+					'valid'        => ! empty( $block_names ) && $lint['valid'],
+					'block_count'  => count( $block_names ),
+					'block_names'  => $block_names,
+					'issue_counts' => $lint['issue_counts'],
+					'issues'       => $lint['issues'],
 				);
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
-		'dhali/get-icon-manifest'              => array(
+		// ── dhali/get-icon-manifest ──────────────────────────────────────────
+		// FIX: Templates previously used `iconName:"placeholder"` (fails lint rule
+		// outermost_icon_untrusted_name) and empty SVG shells (fails outermost_icon_empty_svg).
+		// Both now use real icon data so they pass lint if used verbatim.
+		'dhali/get-icon-manifest' => array(
 			'label'               => 'Get icon manifest',
 			'description'         => 'Returns Ollie/Outermost icon block markup templates for named and custom SVG icons.',
 			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema(
-				'icon_manifest',
-				'Use "icon_manifest" to fetch available icon slugs and markup skeletons.'
-			),
+			'input_schema'        => dhali_mcp_request_input_schema( 'icon_manifest', 'Use "icon_manifest".' ),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -1020,19 +1025,43 @@ function dhali_register_mcp_abilities() {
 			'execute_callback'    => function ( $input = array() ) {
 				return array(
 					'icons' => array(
-						'outermost-named-icon'        => '<!-- wp:outermost/icon-block {"iconName":"placeholder","iconColor":"primary","width":"1.75rem"} --><div class="wp-block-outermost-icon-block"><div class="icon-container has-icon-color has-primary-color" style="width:1.75rem;transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false"></svg></div></div><!-- /wp:outermost/icon-block -->',
-						'outermost-custom-svg-pill'   => '<!-- wp:outermost/icon-block {"iconName":"","iconBackgroundColor":"primary","iconBackgroundColorValue":"#fbb042","width":"90px","style":{"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}},"spacing":{"padding":{"top":"20px","right":"5px","bottom":"20px","left":"5px"}}}} --><div class="wp-block-outermost-icon-block"><div class="icon-container has-icon-background-color has-primary-background-color" style="background-color:#fbb042;width:90px;padding-top:20px;padding-right:5px;padding-bottom:20px;padding-left:5px;border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"></svg></div></div><!-- /wp:outermost/icon-block -->',
-						'custom-svg-behavior-summary' => 'Keep SVG paths inside the icon-container. Put width, background color, padding, border radius, transform, and preset classes on the outermost/icon-block wrapper/container.',
+
+						// Named Phosphor icon — ollie-phosphor-question with real SVG path.
+						// iconColorValue is an editor-resolved hex, not a CSS variable.
+						'outermost-named-icon' =>
+							'<!-- wp:outermost/icon-block {"iconName":"ollie-phosphor-question","iconColor":"primary","iconColorValue":"#5344F4","width":"1.75rem"} -->' .
+							'<div class="wp-block-outermost-icon-block">' .
+							'<div class="icon-container has-icon-color has-primary-color" style="color:#5344F4;width:1.75rem;transform:rotate(0deg) scaleX(1) scaleY(1)">' .
+							'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false">' .
+							'<path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"></path>' .
+							'</svg></div></div>' .
+							'<!-- /wp:outermost/icon-block -->',
+
+						// Custom SVG with background pill — iconName:"" with real SVG path.
+						// For AI-generated SVGs, prefer core/html instead (see custom-svg-via-core-html in editor-safe snippets).
+						// Only use this template when copying exact editor-saved custom icon markup.
+						'outermost-custom-svg-pill' =>
+							'<!-- wp:outermost/icon-block {"iconName":"","iconBackgroundColor":"tertiary","iconBackgroundColorValue":"#f8f7fc","width":"90px","style":{"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}},"spacing":{"padding":{"top":"20px","right":"5px","bottom":"20px","left":"5px"}}}} -->' .
+							'<div class="wp-block-outermost-icon-block">' .
+							'<div class="icon-container has-icon-background-color has-tertiary-background-color" style="background-color:#f8f7fc;width:90px;padding-top:20px;padding-right:5px;padding-bottom:20px;padding-left:5px;border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);transform:rotate(0deg) scaleX(1) scaleY(1)">' .
+							'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#1E1E26" aria-hidden="true" focusable="false">' .
+							'<circle cx="12" cy="12" r="10"/>' .
+							'</svg></div></div>' .
+							'<!-- /wp:outermost/icon-block -->',
+
+						'usage-note' =>
+							'Use outermost-named-icon only for known-good Phosphor icon slugs from editor-saved markup. ' .
+							'Use outermost-custom-svg-pill only when copying exact editor-saved custom icon markup — replace the SVG path with the real path before writing. ' .
+							'For AI-generated decorative SVGs, always use core/html (see get-editor-safe-block-snippets: custom-svg-via-core-html).',
 					),
 				);
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
-		'dhali/lint-pattern-authoring-rules'   => array(
+		// ── dhali/lint-pattern-authoring-rules ───────────────────────────────
+		'dhali/lint-pattern-authoring-rules' => array(
 			'label'               => 'Lint pattern authoring rules',
 			'description'         => 'Applies Dhali/Ollie editor-safety rules to proposed block markup before or after writing a pattern.',
 			'category'            => 'site',
@@ -1040,20 +1069,15 @@ function dhali_register_mcp_abilities() {
 				'type'                 => 'object',
 				'properties'           => array(
 					'request' => array(
-						'type'        => 'string',
-						'description' => 'Use "lint_pattern_authoring_rules".',
-						'enum'        => array( 'lint_pattern_authoring_rules' ),
-						'default'     => 'lint_pattern_authoring_rules',
+						'type'    => 'string',
+						'enum'    => array( 'lint_pattern_authoring_rules' ),
+						'default' => 'lint_pattern_authoring_rules',
 					),
-					'markup'  => array(
-						'type'        => 'string',
-						'description' => 'The proposed WordPress block markup to lint.',
-					),
+					'markup'  => array( 'type' => 'string', 'description' => 'Block markup to lint.' ),
 					'context' => array(
-						'type'        => 'string',
-						'description' => 'Pattern context: standalone, query_loop, post_template, or template_part.',
-						'enum'        => array( 'standalone', 'query_loop', 'post_template', 'template_part' ),
-						'default'     => 'standalone',
+						'type'    => 'string',
+						'enum'    => array( 'standalone', 'query_loop', 'post_template', 'template_part' ),
+						'default' => 'standalone',
 					),
 				),
 				'required'             => array( 'request', 'markup' ),
@@ -1062,50 +1086,28 @@ function dhali_register_mcp_abilities() {
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
-					'valid'        => array(
-						'type'        => 'boolean',
-						'description' => 'Whether no error-severity lint issues were found.',
-					),
-					'context'      => dhali_mcp_string_schema( 'The lint context used.' ),
-					'issue_counts' => array(
-						'type'        => 'object',
-						'description' => 'Issue counts by severity.',
-					),
-					'issues'       => array(
-						'type'        => 'array',
-						'description' => 'Lint issues.',
-						'items'       => array(
-							'type'       => 'object',
-							'properties' => array(
-								'severity' => dhali_mcp_string_schema( 'Issue severity.' ),
-								'rule'     => dhali_mcp_string_schema( 'Rule identifier.' ),
-								'message'  => dhali_mcp_string_schema( 'Human-readable issue message.' ),
-							),
-						),
-					),
+					'valid'        => array( 'type' => 'boolean', 'description' => 'True when zero errors found.' ),
+					'context'      => dhali_mcp_string_schema( 'Context used for linting.' ),
+					'issue_counts' => array( 'type' => 'object', 'description' => 'Lint issue counts by severity.' ),
+					'issues'       => $lint_issue_schema,
 				),
 				'required'   => array( 'valid', 'context', 'issue_counts', 'issues' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
 				$markup  = isset( $input['markup'] ) && is_string( $input['markup'] ) ? $input['markup'] : '';
 				$context = isset( $input['context'] ) && is_string( $input['context'] ) ? $input['context'] : 'standalone';
-
 				return dhali_mcp_lint_pattern_markup( $markup, $context );
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
+		// ── dhali/get-editor-safe-block-snippets ─────────────────────────────
 		'dhali/get-editor-safe-block-snippets' => array(
 			'label'               => 'Get editor-safe block snippets',
 			'description'         => 'Returns known-good editor-safe snippets and composition guidance for fragile block types.',
 			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema(
-				'editor_safe_block_snippets',
-				'Use "editor_safe_block_snippets" to fetch known-good snippets and safety rules.'
-			),
+			'input_schema'        => dhali_mcp_request_input_schema( 'editor_safe_block_snippets', 'Use "editor_safe_block_snippets".' ),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -1121,39 +1123,32 @@ function dhali_register_mcp_abilities() {
 			'execute_callback'    => function ( $input = array() ) {
 				return dhali_mcp_get_editor_safe_block_snippets_data();
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
+		// ── dhali/test-pattern-in-editor-context ─────────────────────────────
+		// FIX: Draft is now only created when lint passes (zero errors). Previously
+		// a draft was inserted even when lint returned errors, polluting the DB with
+		// known-broken markup and giving a misleading edit_url.
 		'dhali/test-pattern-in-editor-context' => array(
 			'label'               => 'Test pattern in editor context',
-			'description'         => 'Creates a temporary draft post/page with block markup and reports parse/lint status plus an edit URL for manual editor verification.',
+			'description'         => 'Runs lint, then — only if lint passes — creates a temporary draft post with the block markup and returns an edit URL for manual editor verification.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
 					'request'   => array(
-						'type'        => 'string',
-						'description' => 'Use "test_pattern_in_editor_context".',
-						'enum'        => array( 'test_pattern_in_editor_context' ),
-						'default'     => 'test_pattern_in_editor_context',
+						'type'    => 'string',
+						'enum'    => array( 'test_pattern_in_editor_context' ),
+						'default' => 'test_pattern_in_editor_context',
 					),
-					'markup'    => array(
-						'type'        => 'string',
-						'description' => 'The WordPress block markup to place in a temporary draft.',
-					),
-					'post_type' => array(
-						'type'        => 'string',
-						'description' => 'Post type for the temporary draft. Defaults to page.',
-						'default'     => 'page',
-					),
+					'markup'    => array( 'type' => 'string', 'description' => 'The WordPress block markup to place in a temporary draft.' ),
+					'post_type' => array( 'type' => 'string', 'description' => 'Post type for the temporary draft. Defaults to page.', 'default' => 'page' ),
 					'context'   => array(
-						'type'        => 'string',
-						'description' => 'Pattern context for linting.',
-						'enum'        => array( 'standalone', 'query_loop', 'post_template', 'template_part' ),
-						'default'     => 'standalone',
+						'type'    => 'string',
+						'enum'    => array( 'standalone', 'query_loop', 'post_template', 'template_part' ),
+						'default' => 'standalone',
 					),
 				),
 				'required'             => array( 'request', 'markup' ),
@@ -1162,36 +1157,13 @@ function dhali_register_mcp_abilities() {
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
-					'valid'        => array(
-						'type'        => 'boolean',
-						'description' => 'Whether markup parsed and passed Dhali authoring lint.',
-					),
-					'post_id'      => array(
-						'type'        => 'integer',
-						'description' => 'Temporary draft post ID, or 0 on failure.',
-					),
-					'edit_url'     => dhali_mcp_string_schema( 'Admin edit URL for manual editor verification.' ),
-					'block_count'  => array(
-						'type'        => 'integer',
-						'description' => 'Parsed top-level block count.',
-					),
+					'valid'        => array( 'type' => 'boolean', 'description' => 'True when lint passed and draft was created successfully.' ),
+					'post_id'      => array( 'type' => 'integer', 'description' => 'Temporary draft post ID, or 0 if lint failed or insertion failed.' ),
+					'edit_url'     => dhali_mcp_string_schema( 'Admin edit URL for manual editor verification. Empty if draft was not created.' ),
+					'block_count'  => array( 'type' => 'integer', 'description' => 'Named top-level block count.' ),
 					'block_names'  => dhali_mcp_string_array_schema( 'Parsed top-level block names.' ),
-					'issue_counts' => array(
-						'type'        => 'object',
-						'description' => 'Lint issue counts by severity.',
-					),
-					'issues'       => array(
-						'type'        => 'array',
-						'description' => 'Lint or draft-creation issues.',
-						'items'       => array(
-							'type'       => 'object',
-							'properties' => array(
-								'severity' => dhali_mcp_string_schema( 'Issue severity.' ),
-								'rule'     => dhali_mcp_string_schema( 'Rule identifier.' ),
-								'message'  => dhali_mcp_string_schema( 'Human-readable issue message.' ),
-							),
-						),
-					),
+					'issue_counts' => array( 'type' => 'object', 'description' => 'Lint issue counts by severity.' ),
+					'issues'       => $lint_issue_schema,
 				),
 				'required'   => array( 'valid', 'post_id', 'edit_url', 'block_count', 'block_names', 'issue_counts', 'issues' ),
 			),
@@ -1200,19 +1172,35 @@ function dhali_register_mcp_abilities() {
 				$post_type = isset( $input['post_type'] ) && is_string( $input['post_type'] ) ? sanitize_key( $input['post_type'] ) : 'page';
 				$context   = isset( $input['context'] ) && is_string( $input['context'] ) ? $input['context'] : 'standalone';
 
-				$lint   = dhali_mcp_lint_pattern_markup( $markup, $context );
-				$blocks = parse_blocks( $markup );
+				$lint = dhali_mcp_lint_pattern_markup( $markup, $context );
 
+				$blocks      = parse_blocks( $markup );
 				$block_names = array_values(
 					array_filter(
 						array_map(
 							function ( $block ) {
-								return isset( $block['blockName'] ) && is_string( $block['blockName'] ) ? $block['blockName'] : '';
+								return isset( $block['blockName'] ) && is_string( $block['blockName'] ) && '' !== $block['blockName']
+									? $block['blockName']
+									: '';
 							},
 							$blocks
 						)
 					)
 				);
+
+				// FIX: Only create the draft when lint passes.
+				// Inserting broken markup wastes DB rows and misleads the agent with an edit_url.
+				if ( ! $lint['valid'] ) {
+					return array(
+						'valid'        => false,
+						'post_id'      => 0,
+						'edit_url'     => '',
+						'block_count'  => count( $block_names ),
+						'block_names'  => $block_names,
+						'issue_counts' => $lint['issue_counts'],
+						'issues'       => $lint['issues'],
+					);
+				}
 
 				$post_id = wp_insert_post(
 					array(
@@ -1224,15 +1212,11 @@ function dhali_register_mcp_abilities() {
 					true
 				);
 
-				$issues = isset( $lint['issues'] ) && is_array( $lint['issues'] ) ? $lint['issues'] : array();
+				$issues = $lint['issues'];
 
 				if ( is_wp_error( $post_id ) ) {
-					$issues[] = dhali_mcp_pattern_issue(
-						'error',
-						'draft_creation_failed',
-						$post_id->get_error_message()
-					);
-					$post_id = 0;
+					$issues[] = dhali_mcp_pattern_issue( 'error', 'draft_creation_failed', $post_id->get_error_message() );
+					$post_id  = 0;
 				}
 
 				$counts = dhali_mcp_issue_counts( $issues );
@@ -1240,36 +1224,27 @@ function dhali_register_mcp_abilities() {
 				return array(
 					'valid'        => ! empty( $block_names ) && 0 === $counts['error'],
 					'post_id'      => (int) $post_id,
-					'edit_url'     => $post_id ? get_edit_post_link( $post_id, 'raw' ) : '',
-					'block_count'  => count( $blocks ),
+					'edit_url'     => $post_id ? (string) get_edit_post_link( $post_id, 'raw' ) : '',
+					'block_count'  => count( $block_names ),
 					'block_names'  => $block_names,
 					'issue_counts' => $counts,
 					'issues'       => $issues,
 				);
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_pages' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_pages' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
 
-		'dhali/sync-context'                   => array(
+		// ── dhali/sync-context ───────────────────────────────────────────────
+		'dhali/sync-context' => array(
 			'label'               => 'Sync Context Cache',
 			'description'         => 'Updates the project context markdown file with the current WordPress project state.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
-					'request'       => array(
-						'type'        => 'string',
-						'description' => 'Use "sync_context".',
-						'enum'        => array( 'sync_context' ),
-						'default'     => 'sync_context',
-					),
-					'confirm_write' => array(
-						'type'        => 'boolean',
-						'description' => 'Must be true to write the context markdown file.',
-					),
+					'request'       => array( 'type' => 'string', 'enum' => array( 'sync_context' ), 'default' => 'sync_context' ),
+					'confirm_write' => array( 'type' => 'boolean', 'description' => 'Must be true to write the context markdown file.' ),
 				),
 				'required'             => array( 'request', 'confirm_write' ),
 				'additionalProperties' => false,
@@ -1279,10 +1254,7 @@ function dhali_register_mcp_abilities() {
 				'properties' => array(
 					'status'        => dhali_mcp_string_schema( 'Write status.' ),
 					'path'          => dhali_mcp_string_schema( 'Absolute path to the context markdown file.' ),
-					'bytes_written' => array(
-						'type'        => 'integer',
-						'description' => 'Number of bytes written.',
-					),
+					'bytes_written' => array( 'type' => 'integer', 'description' => 'Number of bytes written.' ),
 					'message'       => dhali_mcp_string_schema( 'Human-readable result message.' ),
 				),
 				'required'   => array( 'status', 'path', 'bytes_written', 'message' ),
@@ -1308,7 +1280,7 @@ function dhali_register_mcp_abilities() {
 						'status'        => 'error',
 						'path'          => $context_path,
 						'bytes_written' => 0,
-						'message'       => 'Failed to write context file.',
+						'message'       => 'Failed to write context file. Check directory permissions.',
 					);
 				}
 
@@ -1319,11 +1291,10 @@ function dhali_register_mcp_abilities() {
 					'message'       => 'Context file updated successfully.',
 				);
 			},
-			'permission_callback' => function () {
-				return current_user_can( 'edit_theme_options' );
-			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
 			'meta'                => dhali_mcp_public_tool_meta(),
 		),
+
 	);
 
 	foreach ( $abilities as $name => $args ) {
@@ -1331,16 +1302,8 @@ function dhali_register_mcp_abilities() {
 
 		if ( is_wp_error( $result ) ) {
 			error_log( 'Dhali MCP ability failed to register: ' . $name . ' — ' . $result->get_error_message() );
-
-			if ( defined( 'WP_CLI' ) && WP_CLI ) {
-				WP_CLI::warning( 'Dhali MCP ability failed to register: ' . $name . ' — ' . $result->get_error_message() );
-			}
 		} elseif ( false === $result ) {
 			error_log( 'Dhali MCP ability failed to register: ' . $name );
-
-			if ( defined( 'WP_CLI' ) && WP_CLI ) {
-				WP_CLI::warning( 'Dhali MCP ability failed to register: ' . $name );
-			}
 		}
 	}
 }
