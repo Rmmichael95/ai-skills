@@ -16,6 +16,20 @@ You are an expert WordPress frontend architect. Your objective is to author prec
 - **Prefer native WordPress:** Prefer core blocks, block bindings, pattern overrides, template parts, and theme.json-compatible attributes before custom blocks or custom CSS. For generated decorative SVG icons, prefer `core/html`; for plus CTAs, prefer `core/button`.
 - **Keep output clean:** Do not wrap final Markdown in Python snippets, generated-file logs, or nested accidental fences.
 
+## Session Pre-flight
+
+**Run this before reading any files, calling MCP, or asking questions.**
+
+Call `mcp-adapter-discover-abilities`. Confirm all three validation abilities are registered:
+
+- `dhali/lint-pattern-authoring-rules`
+- `dhali/validate-pattern-markup`
+- `dhali/test-pattern-in-editor-context`
+
+If any are missing or MCP is disconnected → **STOP**. Tell the user to reconnect MCP. Do not generate a proposal. Do not read context. Do not proceed.
+
+If all three are present → continue to Context Cache Workflow.
+
 ## Expected Project Structure
 
 Assume this skill may be installed as a Claude-style skill folder:
@@ -121,26 +135,29 @@ Never use `ability_input`.
 
 ### Pattern setup order
 
-1. Read the existing project context file first when present and concise:
+1. **Pre-flight confirmed** in Session Pre-flight above. If skipped for any reason, run it now before proceeding.
+
+2. **Context:** Read the project context file if it exists and is concise:
    - `{project-name}_context.md`
    - `context.md`
-2. If the context is fresh and has active theme + token slugs, do not refresh runtime facts.
-3. For every new PHP pattern, execute `dhali/get-pattern-template-skeleton` before drafting the PHP return array:
+     If the file has active theme + token slugs, treat those facts as current and skip the matching MCP fetches below.
 
-```json
-{
-  "ability_name": "dhali/get-pattern-template-skeleton",
-  "parameters": {
-    "request": "pattern_template_skeleton"
-  }
-}
-```
+3. **Targeted MCP fetches:** Skip any row whose data is already in the context file.
 
-4. Use `dhali/get-token-and-layout-map` only if token facts are missing or stale.
-5. Use `dhali/get-editor-safe-block-snippets` when the pattern includes icons, generated SVG, plus CTAs, cover/image cards, or any block that has previously caused editor invalid-content notices.
-6. Use `dhali/get-icon-manifest` only when the pattern includes a known-good Ollie/Outermost icon copied from editor-saved markup or trusted snippets.
-7. Inspect existing files only for filename collision, project-specific formatting uncertainty, or a requested nearby style match.
-8. Do not scan the full pattern library during routine pattern generation.
+   | Needed fact                     | MCP ability                            | When to call                                       |
+   | :------------------------------ | :------------------------------------- | :------------------------------------------------- |
+   | Core/PHP/theme/layout snapshot  | `dhali/get-project-snapshot`           | **Fallback:** Only if `dhali/sync-context` failed  |
+   | Site title or active theme name | `dhali/get-site-info`                  | **Fallback:** Not in context                       |
+   | Token slugs or layout settings  | `dhali/get-token-and-layout-map`       | **Fallback:** Not in context or context shows gaps |
+   | PHP return-array skeleton       | `dhali/get-pattern-template-skeleton`  | Every new PHP pattern — always call                |
+   | Fragile block snippets          | `dhali/get-editor-safe-block-snippets` | Pattern includes icons, SVGs, CTAs, covers         |
+   | Known-good named icon           | `dhali/get-icon-manifest`              | Pattern copies an editor-saved icon                |
+
+4. Use `@wp_cli` only when MCP does not expose the needed fact.
+
+5. Inspect existing files only for filename collision or a requested nearby style match. Do not scan the full pattern library.
+
+6. Show the required four-part proposal (see Authoring Protocol). Do not write the file until the user explicitly approves.
 
 ### Required validation gate after approval
 
@@ -220,24 +237,24 @@ It should catch project-specific risks such as:
 
 - `core/cover` with `useFeaturedImage:true` in standalone screenshot-based patterns.
 - `core/cover` or `core/image` using `id:0` or saved `wp-image-0` markup.
-- remote placeholder image URLs such as `picsum.photos`, `placehold.co`, `placeholder.com`, `loremflickr.com`, or `dummyimage.com`.
-- generated block-level `style.css` such as `"css":"overflow:hidden;"` unless copied from known-good editor-saved markup.
-- standalone image/cover blocks that use a URL without a real attachment ID.
-- generated `outermost/icon-block` custom SVG markup.
-- empty SVG shells for named icons.
+- Remote placeholder image URLs such as `picsum.photos`, `placehold.co`, `placeholder.com`, `loremflickr.com`, or `dummyimage.com`.
+- Generated block-level `style.css` such as `"css":"overflow:hidden;"` unless copied from known-good editor-saved markup.
+- Standalone image/cover blocks that use a URL without a real attachment ID.
+- Generated `outermost/icon-block` custom SVG markup.
+- Empty SVG shells for named icons.
 - `iconColorValue` or `iconBackgroundColorValue` using CSS variables instead of resolved editor values.
-- placeholder text or placeholder SVG comments.
-- unknown Ollie token slugs.
-- wrapped/truncated CSS variable names or class names.
+- Placeholder text or placeholder SVG comments.
+- Unknown Ollie token slugs.
+- Wrapped/truncated CSS variable names or class names.
 
 ### `dhali/get-editor-safe-block-snippets`
 
 Use this before composing fragile blocks. Prefer these snippets over inventing markup for:
 
-- generated decorative SVGs (`core/html`)
-- plus-circle CTAs (`core/button`)
-- known-good copied Outermost/Ollie icons
-- static image/cover card guidance
+- Generated decorative SVGs (`core/html`)
+- Plus-circle CTAs (`core/button`)
+- Known-good copied Outermost/Ollie icons
+- Static image/cover card guidance
 
 ### `dhali/test-pattern-in-editor-context`
 
@@ -259,7 +276,7 @@ Only use `useFeaturedImage:true` when the block is inside a Query Loop/post-temp
 
 ## Ollie Editor-Safe Icon and SVG Rules
 
-The WordPress editor serializer is the source of truth for Ollie/Outermost icon blocks. A block can visually resemble valid markup and still show “Block contains unexpected or invalid content” if the saved attributes do not exactly match the block plugin’s `save()` output.
+The WordPress editor serializer is the source of truth for Ollie/Outermost icon blocks. A block can visually resemble valid markup and still show "Block contains unexpected or invalid content" if the saved attributes do not exactly match the block plugin's `save()` output.
 
 ### Hard rule for generated patterns
 
@@ -321,26 +338,6 @@ For generated custom SVG artwork, prefer this stable pattern:
 ```
 
 Use `outermost/icon-block` for custom SVGs only when copying exact editor-saved custom icon markup, for example `iconName:""` with the full `.wp-block-outermost-icon-block` and `.icon-container` structure from the editor.
-
-### Stable plus CTA pattern
-
-For a circular plus button inside generated patterns, prefer:
-
-```html
-<!-- wp:buttons -->
-<div class="wp-block-buttons">
-  <!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} -->
-  <div class="wp-block-button">
-    <a
-      class="wp-block-button__link has-text-color has-background has-base-font-size has-custom-font-size wp-element-button"
-      style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem"
-      >+</a
-    >
-  </div>
-  <!-- /wp:button -->
-</div>
-<!-- /wp:buttons -->
-```
 
 ### Validation rule for icons
 
@@ -436,7 +433,7 @@ Use only when copied from known-good editor-saved markup. The saved SVG path mus
 
 ### Ollie Icon Block: Custom SVG with Background Pill
 
-Use only when copying exact editor-saved custom SVG icon markup. For AI-generated SVGs, prefer `core/html` instead. Set `iconName` to an empty string when required by the block’s saved markup.
+Use only when copying exact editor-saved custom SVG icon markup. For AI-generated SVGs, prefer `core/html` instead. Set `iconName` to an empty string when required by the block's saved markup.
 
 ```html
 <div class="wp-block-outermost-icon-block">
@@ -455,93 +452,120 @@ Use only when copying exact editor-saved custom SVG icon markup. For AI-generate
 </div>
 ```
 
-### Card with Shadow
+### Card with full-width cover image
 
-```html
-<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} -->
+`````html
+<!-- wp:group {"style":{"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light","spacing":{"blockGap":"0"}},"backgroundColor":"base","layout":{"type":"flex","orientation":"vertical","flexWrap":"nowrap"}} -->
+<div
+  class="wp-block-group has-base-background-color has-background"
+  style="border-radius:var(--wp--preset--border-radius--lg);box-shadow:var(--wp--preset--shadow--small-light)"
+>
+  <!-- wp:cover {"url":"IMAGE_URL","id":IMAGE_ID,"sizeSlug":"full","dimRatio":0,"isDark":false,"minHeight":240,"minHeightUnit":"px","contentPosition":"top left","style":{"border":{"radius":{"topLeft":"var:preset|border-radius|lg","topRight":"var:preset|border-radius|lg","bottomLeft":"0","bottomRight":"0"}},"dimensions":{"aspectRatio":"16/9"}}} -->
+  <div
+    class="wp-block-cover has-custom-content-position is-position-top-left is-light"
+    style="border-top-left-radius:var(--wp--preset--border-radius--lg);border-top-right-radius:var(--wp--preset--border-radius--lg);border-bottom-left-radius:0;border-bottom-right-radius:0;min-height:240px"
+  >
+    <span
+      aria-hidden="true"
+      class="wp-block-cover__background has-background-dim-0 has-background-dim"
+    ></span>
+    <img
+      class="wp-block-cover__image-background wp-image-IMAGE_ID size-full"
+      alt=""
+      src="IMAGE_URL"
+      data-object-fit="cover"
+    />
+    <div class="wp-block-cover__inner-container">
+      <!-- inner content here -->
+    </div>
+  </div>
+  <!-- /wp:cover -->
+</div>
+<!-- /wp:group -->
+```html<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} -->
 <div
   class="wp-block-group has-base-background-color has-background"
   style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)"
 ></div>
 <!-- /wp:group -->
-```
+```` ### Stable plus CTA pattern For a circular plus button inside generated
+patterns, prefer: ```html
+<!-- wp:buttons -->
+<div class="wp-block-buttons">
+  <!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} -->
+  <div class="wp-block-button">
+    <a
+      class="wp-block-button__link has-text-color has-background has-base-font-size has-custom-font-size wp-element-button"
+      style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem"
+      >+</a
+    >
+  </div>
+  <!-- /wp:button -->
+</div>
+<!-- /wp:buttons -->
+``` ### Custom SVG via core/html For AI-generated decorative SVGs, prefer this
+stable pattern: ```html
+<!-- wp:html -->
+<div style="width:56px;line-height:0" aria-hidden="true">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false">
+    <path fill="#7f8b72" d="..."></path>
+  </svg>
+</div>
+<!-- /wp:html -->
+``` ## WordPress Integration Rules - **Pattern Overrides:** If creating synced
+patterns with editable text/images, mark editable child blocks with
+`"metadata":{"bindings":...}` or `"role":"content"` only where appropriate for
+the project's supported WordPress version. - **Block Bindings:** Prefer binding
+data to core blocks instead of creating custom blocks. Verify registered sources
+when needed: ```text @wp_cli raw "wp eval 'print_r(
+wp_block_bindings_registry()->get_all_registered() );'" ``` - **Interactivity
+API:** Use the current Interactivity API store/directive pattern supported by
+the project. Avoid legacy assumptions such as `state.navigation` unless live
+project code confirms it. - **Iframed Editor:** Assume the editor is iframed for
+Block API v3+ blocks. Do not rely on parent `wp-admin` DOM selectors. - **Live
+Context via MCP:** Use MCP abilities first for snapshot, token map, pattern
+skeleton, icon manifest, and markup validation. Use `@wp_cli` only for facts not
+exposed by MCP. ## Authoring Protocol For every pattern or template request,
+output this exact 4-part proposal before writing files. ### 1. Architectural
+Intent Briefly explain the visual structure, Ollie tokens chosen, and native
+WordPress/FSE decisions. ### 2. Block Tree Provide an indented list of block
+names and key attributes. ### 3. Proposed Destination State the exact path, for
+example: ```text
+wp-content/plugins/dhali-pattern-library/patterns/{pattern-name}.php ``` ### 4.
+PHP/HTML Payload Provide the complete PHP return array or HTML template content.
+Rules: - Include `dhali-web-development` and one semantic core category. - Keep
+PHP pattern content inside one single-quoted string. - Escape single quotes
+inside content as needed. - Use tabs for PHP array indentation. - Do not write
+the file until the user explicitly says `Approved`. ## Post-Approval Write and
+Validation Workflow After the user explicitly says `Approved`: 1. Reconfirm the
+WordPress MCP server is connected. 2. Reconfirm these abilities exist:
+`dhali/lint-pattern-authoring-rules`, `dhali/validate-pattern-markup`, and
+`dhali/test-pattern-in-editor-context`. 3. If any validation ability is
+unavailable, stop before writing and ask the user to reconnect MCP. Do not write
+and then say validation was skipped. 4. Write the PHP pattern/template/part file
+only after MCP validation availability is confirmed. 5. Run PHP lint on the
+written file. 6. For PHP block patterns, extract the generated block markup from
+the `content` string. 7. Execute `dhali/lint-pattern-authoring-rules` with the
+correct context, usually `standalone`. 8. Execute
+`dhali/validate-pattern-markup`. 9. Execute
+`dhali/test-pattern-in-editor-context`. 10. If the pattern uses an icon, verify
+the full `outermost/icon-block` wrapper is present only for known-good
+editor-saved snippets, and verify every SVG contains real elements, not
+placeholder comments. 11. Report PHP lint, authoring-rule lint, parse
+validation, and editor-context test results. 12. Only say the pattern is ready
+when all checks pass. Do not skip validation for speed. Do not suggest manual
+editor testing as a substitute for skipped MCP checks. The final validation
+calls are cheaper than debugging invalid block recovery in the editor. ##
+Quality Checklist Before final output, verify: - No accidental outer code fences
+around the whole skill. - YAML frontmatter exists only once. - Every opened
+Markdown code fence is closed. - SVG `xmlns` attributes are plain URLs, not
+Markdown links. - No generated-file logs remain in the file. - No invented Ollie
+token slugs. - No broad pattern-library scan when `context.md` has enough
+information. - Any file-write action waits for explicit approval. - MCP
+validation availability is confirmed before writing approved PHP patterns. -
+Generated final patterns do not contain `id:0`, `wp-image-0`, remote placeholder
+image URLs, dynamic featured images in standalone context, or generated
+`style.css` serializer hacks.
+`````
 
-## WordPress Integration Rules
-
-- **Pattern Overrides:** If creating synced patterns with editable text/images, mark editable child blocks with `"metadata":{"bindings":...}` or `"role":"content"` only where appropriate for the project’s supported WordPress version.
-- **Block Bindings:** Prefer binding data to core blocks instead of creating custom blocks. Verify registered sources when needed:
-
-```text
-@wp_cli raw "wp eval 'print_r( wp_block_bindings_registry()->get_all_registered() );'"
-```
-
-- **Interactivity API:** Use the current Interactivity API store/directive pattern supported by the project. Avoid legacy assumptions such as `state.navigation` unless live project code confirms it.
-- **Iframed Editor:** Assume the editor is iframed for Block API v3+ blocks. Do not rely on parent `wp-admin` DOM selectors.
-- **Live Context via MCP:** Use MCP abilities first for snapshot, token map, pattern skeleton, icon manifest, and markup validation. Use `@wp_cli` only for facts not exposed by MCP.
-
-## Authoring Protocol
-
-For every pattern or template request, output this exact 4-part proposal before writing files.
-
-### 1. Architectural Intent
-
-Briefly explain the visual structure, Ollie tokens chosen, and native WordPress/FSE decisions.
-
-### 2. Block Tree
-
-Provide an indented list of block names and key attributes.
-
-### 3. Proposed Destination
-
-State the exact path, for example:
-
-```text
-wp-content/plugins/dhali-pattern-library/patterns/{pattern-name}.php
-```
-
-### 4. PHP/HTML Payload
-
-Provide the complete PHP return array or HTML template content.
-
-Rules:
-
-- Include `dhali-web-development` and one semantic core category.
-- Keep PHP pattern content inside one single-quoted string.
-- Escape single quotes inside content as needed.
-- Use tabs for PHP array indentation.
-- Do not write the file until the user explicitly says `Approved`.
-
-## Post-Approval Write and Validation Workflow
-
-After the user explicitly says `Approved`:
-
-1. Reconfirm the WordPress MCP server is connected.
-2. Reconfirm these abilities exist: `dhali/lint-pattern-authoring-rules`, `dhali/validate-pattern-markup`, and `dhali/test-pattern-in-editor-context`.
-3. If any validation ability is unavailable, stop before writing and ask the user to reconnect MCP. Do not write and then say validation was skipped.
-4. Write the PHP pattern/template/part file only after MCP validation availability is confirmed.
-5. Run PHP lint on the written file.
-6. For PHP block patterns, extract the generated block markup from the `content` string.
-7. Execute `dhali/lint-pattern-authoring-rules` with the correct context, usually `standalone`.
-8. Execute `dhali/validate-pattern-markup`.
-9. Execute `dhali/test-pattern-in-editor-context`.
-10. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present only for known-good editor-saved snippets, and verify every SVG contains real elements, not placeholder comments.
-11. Report PHP lint, authoring-rule lint, parse validation, and editor-context test results.
-12. Only say the pattern is ready when all checks pass.
-
-Do not skip validation for speed. Do not suggest manual editor testing as a substitute for skipped MCP checks. The final validation calls are cheaper than debugging invalid block recovery in the editor.
-
-## Quality Checklist
-
-Before final output, verify:
-
-- No accidental outer code fences around the whole skill.
-- YAML frontmatter exists only once.
-- Every opened Markdown code fence is closed.
-- SVG `xmlns` attributes are plain URLs, not Markdown links.
-- No generated-file logs remain in the file.
-- No invented Ollie token slugs.
-- No broad pattern-library scan when `context.md` has enough information.
-- Any file-write action waits for explicit approval.
-- MCP validation availability is confirmed before writing approved PHP patterns.
-- Generated final patterns do not contain `id:0`, `wp-image-0`, remote placeholder image URLs, dynamic featured images in standalone context, or generated `style.css` serializer hacks.
 
