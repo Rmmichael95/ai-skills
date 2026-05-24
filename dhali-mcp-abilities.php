@@ -653,6 +653,32 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		);
 	}
 
+	// CONFIRMED by editor testing: when style.spacing.blockGap is set on a flex
+	// core/group, WordPress save() generates NO inline gap style. The gap is applied
+	// entirely through WordPress's CSS generation system. Any gap-related property
+	// in the saved HTML div's style attribute is a serializer mismatch.
+	if ( preg_match( '/class="[^"]*is-layout-flex/', $markup ) ) {
+		if ( preg_match( '/style="[^"]*--wp--style--block-gap\s*:/', $markup ) ) {
+			$issues[] = dhali_mcp_pattern_issue(
+				'error',
+				'flex_group_invalid_block_gap_inline_style',
+				'Found --wp--style--block-gap in an inline style on a flex layout block. ' .
+				'WordPress does not serialize blockGap as an inline style on flex groups — ' .
+				'the gap is applied via generated CSS. Remove it from the style attribute.'
+			);
+		}
+
+		if ( preg_match( '/style="[^"]*\bgap\s*:\s*var\(/', $markup ) ) {
+			$issues[] = dhali_mcp_pattern_issue(
+				'error',
+				'flex_group_invalid_gap_property',
+				'Found gap:var(...) in an inline style on a flex layout block. ' .
+				'WordPress applies blockGap via generated CSS, not an inline gap property. ' .
+				'Remove it. Use the flex-group-vertical or flex-group-horizontal snippet from get-editor-safe-block-snippets.'
+			);
+		}
+	}
+
 	// ── Icon / SVG checks ──────────────────────────────────────────────────
 
 	if ( preg_match( '/<svg[^>]*>\s*<!--/', $markup ) ) {
@@ -739,21 +765,49 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 			'Final generated patterns must not use id:0, wp-image-0, remote placeholder images, or generated overflow:hidden style.css.',
 			'If a screenshot-matched card needs a real image and no media URL/id is known, ask for the asset before writing the final pattern.',
 			'When fontSize is a preset slug (e.g. "base"), the <a> element must have has-{slug}-font-size only. Never add has-custom-font-size alongside a preset fontSize — that causes a JS serializer mismatch.',
+			'CONFIRMED by editor testing: core/group with layout.type "flex" and style.spacing.blockGap must NOT have any gap-related property in the saved HTML inline style. WordPress applies blockGap via generated CSS. Use the flex-group-vertical or flex-group-horizontal snippet — never generate flex group HTML from scratch.',
 		),
 		'snippets'   => array(
 
-			// FIX: Removed has-custom-font-size. WordPress core/button save() only adds
-			// has-custom-font-size when style.typography.fontSize (a custom value) is set.
-			// With a preset fontSize slug it generates has-{slug}-font-size only.
-			'plus-cta-button'                  => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} --><div class="wp-block-button"><a class="wp-block-button__link has-text-color has-background has-base-font-size wp-element-button" style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem">+</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
+			// CONFIRMED: preset fontSize uses has-{slug}-font-size only, never has-custom-font-size.
+			'plus-cta-button' => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} --><div class="wp-block-button"><a class="wp-block-button__link has-text-color has-background has-base-font-size wp-element-button" style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem">+</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
 
-			'custom-svg-via-core-html'         => '<!-- wp:html --><div style="width:56px;line-height:0" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="M32 8 a24 24 0 1 1 0 48 a24 24 0 0 1 0-48 z"></path></svg></div><!-- /wp:html -->',
+			'custom-svg-via-core-html' => '<!-- wp:html --><div style="width:56px;line-height:0" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="M32 8 a24 24 0 1 1 0 48 a24 24 0 0 1 0-48 z"></path></svg></div><!-- /wp:html -->',
 
-			'card-with-shadow'                 => '<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} --><div class="wp-block-group has-base-background-color has-background" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)"></div><!-- /wp:group -->',
+			// CONFIRMED by editor testing (2026-05):
+			// - Layout classes ARE required: is-layout-flex, is-vertical, wp-block-group-is-layout-flex
+			// - blockGap must NOT appear in the inline style attribute
+			// - Other style properties (padding, border-radius, shadow) DO go in the inline style normally
+			// - gap: or --wp--style--block-gap: in the style attribute causes "invalid content" error
+			'flex-group-vertical' =>
+				'<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"},"blockGap":"var:preset|spacing|small"},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"flex","orientation":"vertical","flexWrap":"nowrap"}} -->' .
+				'<div class="wp-block-group has-base-background-color has-background is-layout-flex is-vertical wp-block-group-is-layout-flex" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)">' .
+				'</div>' .
+				'<!-- /wp:group -->',
 
-			'static-cover-card-note'           => 'For standalone screenshot cards: use core/cover with explicit real media url, id (integer > 0), sizeSlug, and saved <img> markup. Never use useFeaturedImage:true outside Query Loop or post template context. Never use id:0, wp-image-0, placeholder image URLs, or overflow:hidden style.css.',
+			'flex-group-horizontal' =>
+				'<!-- wp:group {"style":{"spacing":{"blockGap":"var:preset|spacing|medium"}},"layout":{"type":"flex","orientation":"horizontal","flexWrap":"nowrap","justifyContent":"left","verticalAlignment":"center"}} -->' .
+				'<div class="wp-block-group is-layout-flex is-horizontal wp-block-group-is-layout-flex">' .
+				'</div>' .
+				'<!-- /wp:group -->',
 
-			'static-image-card-note'           => 'Use core/image for ordinary screenshot-matched featured images when no overlay content is required. Provide a real attachment ID.',
+			'flex-group-note' =>
+				'Use flex-group-vertical or flex-group-horizontal for any core/group with layout.type "flex". ' .
+				'Never generate flex group HTML from scratch. ' .
+				'Required: layout classes (is-layout-flex, is-vertical/is-horizontal, wp-block-group-is-layout-flex). ' .
+				'Required: blockGap omitted from inline style entirely — no gap: and no --wp--style--block-gap: in style="".',
+
+			'card-with-shadow' =>
+				'<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} -->' .
+				'<div class="wp-block-group has-base-background-color has-background" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)">' .
+				'</div>' .
+				'<!-- /wp:group -->',
+
+			'static-cover-card-note' =>
+				'For standalone screenshot cards: use core/cover with explicit real media url, id (integer > 0), sizeSlug, and saved <img> markup. Never use useFeaturedImage:true outside Query Loop or post template context. Never use id:0, wp-image-0, placeholder image URLs, or overflow:hidden style.css.',
+
+			'static-image-card-note' =>
+				'Use core/image for ordinary screenshot-matched featured images when no overlay content is required. Provide a real attachment ID.',
 		),
 	);
 }
