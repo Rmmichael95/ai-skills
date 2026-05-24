@@ -144,12 +144,21 @@ Never use `ability_input`.
 
 ### Required validation gate after approval
 
-After the user approves and after writing a PHP pattern file, always run the complete validation sequence before claiming success:
+After the user approves, **do not write immediately**. First confirm the WordPress MCP server is connected and the validation abilities are available. If MCP is disconnected or any required validation ability is missing, stop before writing and ask the user to reconnect MCP. Do not write a pattern that cannot be linted and smoke-tested.
 
-1. PHP lint on the written file.
-2. MCP authoring-rule lint with `dhali/lint-pattern-authoring-rules`.
-3. MCP block parse validation with `dhali/validate-pattern-markup`.
-4. MCP draft editor-context test with `dhali/test-pattern-in-editor-context` when available.
+Required abilities before writing:
+
+- `dhali/lint-pattern-authoring-rules`
+- `dhali/validate-pattern-markup`
+- `dhali/test-pattern-in-editor-context`
+
+Once MCP availability is confirmed, run the complete validation sequence before claiming success:
+
+1. Write the PHP pattern file.
+2. PHP lint on the written file.
+3. MCP authoring-rule lint with `dhali/lint-pattern-authoring-rules`.
+4. MCP block parse validation with `dhali/validate-pattern-markup`.
+5. MCP draft editor-context test with `dhali/test-pattern-in-editor-context`.
 
 Authoring-rule lint shape:
 
@@ -210,6 +219,10 @@ Run this on proposed or written block markup whenever the pattern includes image
 It should catch project-specific risks such as:
 
 - `core/cover` with `useFeaturedImage:true` in standalone screenshot-based patterns.
+- `core/cover` or `core/image` using `id:0` or saved `wp-image-0` markup.
+- remote placeholder image URLs such as `picsum.photos`, `placehold.co`, `placeholder.com`, `loremflickr.com`, or `dummyimage.com`.
+- generated block-level `style.css` such as `"css":"overflow:hidden;"` unless copied from known-good editor-saved markup.
+- standalone image/cover blocks that use a URL without a real attachment ID.
 - generated `outermost/icon-block` custom SVG markup.
 - empty SVG shells for named icons.
 - `iconColorValue` or `iconBackgroundColorValue` using CSS variables instead of resolved editor values.
@@ -334,6 +347,26 @@ For a circular plus button inside generated patterns, prefer:
 If a generated pattern contains `outermost/icon-block`, treat it as editor-sensitive.
 
 `php -l` and `parse_blocks()` validation are not enough to prove editor serialization safety for third-party icon blocks. Prefer known-good copied icon markup. If you cannot guarantee the icon block is editor-safe, use `core/html`, `core/image`, or `core/button` instead.
+
+## Image and Cover Safety Rules
+
+For standalone screenshot-based card patterns, do not use dynamic or fake media as final saved markup.
+
+Hard errors for generated final patterns:
+
+- Do not use `core/cover` with `useFeaturedImage:true` unless the user explicitly asks for Query Loop, post template, or post-context output.
+- Do not write `id:0`.
+- Do not write `wp-image-0`.
+- Do not use remote placeholder image services such as `picsum.photos`, `placehold.co`, `placeholder.com`, `loremflickr.com`, or `dummyimage.com`.
+- Do not use generated block-level `style.css` such as `"css":"overflow:hidden;"` for clipping. Use normal block supports or known-good editor-copied markup.
+
+If a screenshot-matched design requires a real image and no real project media URL/ID is known, stop before writing and ask the user for the media asset. A proposal may include a clearly marked placeholder, but the final written pattern must not include fake remote image URLs, `id:0`, or `wp-image-0`.
+
+For static screenshot cards:
+
+- Use `core/image` when the image is simply displayed.
+- Use static `core/cover` only when overlay content is needed and the URL/ID are real or copied from known-good editor markup.
+- If rounded clipping is required, prefer known-good editor-saved cover/image markup. Do not invent serializer-sensitive attributes.
 
 ## Screenshot Reference Workflow
 
@@ -482,17 +515,20 @@ Rules:
 
 After the user explicitly says `Approved`:
 
-1. Write the PHP pattern/template/part file.
-2. Run PHP lint on the written file.
-3. For PHP block patterns, extract the generated block markup from the `content` string.
-4. Execute `dhali/lint-pattern-authoring-rules` with the correct context, usually `standalone`.
-5. Execute `dhali/validate-pattern-markup`.
-6. Execute `dhali/test-pattern-in-editor-context` when available.
-7. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present only for known-good editor-saved snippets, and verify every SVG contains real elements, not placeholder comments.
-8. Report PHP lint, authoring-rule lint, parse validation, and editor-context test results.
-9. Only say the pattern is ready when all available checks pass.
+1. Reconfirm the WordPress MCP server is connected.
+2. Reconfirm these abilities exist: `dhali/lint-pattern-authoring-rules`, `dhali/validate-pattern-markup`, and `dhali/test-pattern-in-editor-context`.
+3. If any validation ability is unavailable, stop before writing and ask the user to reconnect MCP. Do not write and then say validation was skipped.
+4. Write the PHP pattern/template/part file only after MCP validation availability is confirmed.
+5. Run PHP lint on the written file.
+6. For PHP block patterns, extract the generated block markup from the `content` string.
+7. Execute `dhali/lint-pattern-authoring-rules` with the correct context, usually `standalone`.
+8. Execute `dhali/validate-pattern-markup`.
+9. Execute `dhali/test-pattern-in-editor-context`.
+10. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present only for known-good editor-saved snippets, and verify every SVG contains real elements, not placeholder comments.
+11. Report PHP lint, authoring-rule lint, parse validation, and editor-context test results.
+12. Only say the pattern is ready when all checks pass.
 
-Do not skip validation for speed. The final validation calls are cheaper than debugging invalid block recovery in the editor.
+Do not skip validation for speed. Do not suggest manual editor testing as a substitute for skipped MCP checks. The final validation calls are cheaper than debugging invalid block recovery in the editor.
 
 ## Quality Checklist
 
@@ -506,3 +542,6 @@ Before final output, verify:
 - No invented Ollie token slugs.
 - No broad pattern-library scan when `context.md` has enough information.
 - Any file-write action waits for explicit approval.
+- MCP validation availability is confirmed before writing approved PHP patterns.
+- Generated final patterns do not contain `id:0`, `wp-image-0`, remote placeholder image URLs, dynamic featured images in standalone context, or generated `style.css` serializer hacks.
+

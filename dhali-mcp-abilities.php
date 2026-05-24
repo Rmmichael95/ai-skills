@@ -617,6 +617,53 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		);
 	}
 
+	if ( preg_match( '/"css"\s*:\s*"/', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'no_generated_block_style_css',
+			'Do not use block-level style.css in generated patterns unless it was copied from known-good editor-saved markup. Prefer normal block supports or ask for a known-good snippet.'
+		);
+	}
+
+	if ( preg_match( '/"id"\s*:\s*0\b/', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'no_zero_media_id',
+			'Do not write image or cover blocks with id:0. Use a real media attachment ID or omit image-id-specific saved classes/attributes.'
+		);
+	}
+
+	if ( false !== strpos( $markup, 'wp-image-0' ) ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'no_wp_image_zero',
+			'Do not emit wp-image-0 in saved markup. Use a real media attachment ID or omit the wp-image-* class.'
+		);
+	}
+
+	if ( preg_match( '#https?://[^\"\']*(picsum\.photos|placehold\.co|placeholder\.com|loremflickr\.com|dummyimage\.com)[^\"\']*#i', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'no_remote_placeholder_images',
+			'Do not write final generated patterns with remote placeholder image URLs such as picsum.photos. Ask for a real media URL/ID or use an editor-safe no-image placeholder.'
+		);
+	}
+
+	if ( 'standalone' === $context && preg_match_all( '/<!--\s*wp:(cover|image)\s+(\{.*?\})\s*-->/s', $markup, $media_blocks, PREG_SET_ORDER ) ) {
+		foreach ( $media_blocks as $media_block ) {
+			$block_name = isset( $media_block[1] ) ? $media_block[1] : 'media';
+			$attrs_raw  = isset( $media_block[2] ) ? $media_block[2] : '';
+
+			if ( false !== strpos( $attrs_raw, '"url"' ) && ! preg_match( '/"id"\s*:\s*[1-9][0-9]*/', $attrs_raw ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'warning',
+					'standalone_media_without_attachment_id',
+					sprintf( 'Standalone core/%s uses a URL without a real media attachment id. Prefer a real media URL/id from the project or ask before writing final patterns.', $block_name )
+				);
+			}
+		}
+	}
+
 	if ( preg_match_all( '/<!--\s*wp:outermost\/icon-block\b.*?<!--\s*\/wp:outermost\/icon-block\s*-->/s', $markup, $icon_blocks ) ) {
 		foreach ( $icon_blocks[0] as $index => $icon_block ) {
 			$label = 'outermost/icon-block #' . ( $index + 1 );
@@ -695,13 +742,15 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 			'Circular plus CTAs should use core/buttons plus core/button text "+".',
 			'Use outermost/icon-block only with known-good editor-saved markup or trusted snippets with full SVG paths.',
 			'Use static core/image or static core/cover for screenshot-matched standalone cards. Use useFeaturedImage:true only in Query Loop or post-template context.',
+			'Final generated patterns must not use id:0, wp-image-0, remote placeholder images, or generated block-level style.css.',
+			'If a screenshot-matched card needs a real image and no media URL/id is known, ask for the asset before writing the final pattern.',
 		),
 		'snippets'   => array(
 			'core-html-decorative-svg'         => '<!-- wp:html --><div style="width:56px;line-height:0" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="M28.5 8c2.9 0 5.3 2.4 5.3 5.3s-2.4 5.3-5.3 5.3-5.3-2.4-5.3-5.3S25.6 8 28.5 8Z"></path></svg></div><!-- /wp:html -->',
 			'core-button-plus-circle'          => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} --><div class="wp-block-button"><a class="wp-block-button__link has-text-color has-background has-base-font-size has-custom-font-size wp-element-button" style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem">+</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
 			'outermost-phosphor-minus'         => '<!-- wp:outermost/icon-block {"iconName":"ollie-phosphor-minus","iconColor":"primary","iconColorValue":"#fbb042"} --><div class="wp-block-outermost-icon-block"><div class="icon-container has-icon-color has-primary-color" style="color:#fbb042;width:48px;transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z"></path></svg></div></div><!-- /wp:outermost/icon-block -->',
 			'outermost-phosphor-question-pill' => '<!-- wp:outermost/icon-block {"iconName":"ollie-phosphor-question","iconBackgroundColor":"primary","iconBackgroundColorValue":"#fbb042","iconColor":"base","iconColorValue":"#ffffff","width":"80px","style":{"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}}}} --><div class="wp-block-outermost-icon-block"><div class="icon-container has-icon-color has-icon-background-color has-primary-background-color has-base-color" style="background-color:#fbb042;color:#ffffff;width:80px;border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"></path></svg></div></div><!-- /wp:outermost/icon-block -->',
-			'static-cover-card-note'           => 'For standalone screenshot cards, use core/cover with explicit url/id/sizeSlug/img markup. Do not use useFeaturedImage:true unless in Query Loop or post template context.',
+			'static-cover-card-note'           => 'For standalone screenshot cards, use core/cover with explicit real media url/id/sizeSlug/img markup. Do not use useFeaturedImage:true unless in Query Loop or post template context. Never use id:0, wp-image-0, picsum/photos placeholders, or generated style.css overflow clipping in final patterns.',
 			'static-image-card-note'           => 'Use core/image for ordinary screenshot-matched featured images when no overlay content is required.',
 		),
 	);
