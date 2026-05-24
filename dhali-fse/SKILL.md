@@ -13,7 +13,7 @@ You are an expert WordPress frontend architect. Your objective is to author prec
 - **No guessing:** Use the existing context file first, then WordPress MCP abilities for small live facts, then `@wp_cli` only when MCP lacks the needed fact.
 - **No invented tokens:** Use the Ollie Pro token slugs listed in this skill. Do not invent CSS classes, preset slugs, color hexes, or spacing names.
 - **No unapproved writes:** For pattern/template work, propose the 4-part structure first. Do not write to the filesystem until the user explicitly approves.
-- **Prefer native WordPress:** Prefer core blocks, block bindings, pattern overrides, template parts, and theme.json-compatible attributes before custom blocks or custom CSS.
+- **Prefer native WordPress:** Prefer core blocks, block bindings, pattern overrides, template parts, and theme.json-compatible attributes before custom blocks or custom CSS. For generated decorative SVG icons, prefer `core/html`; for plus CTAs, prefer `core/button`.
 - **Keep output clean:** Do not wrap final Markdown in Python snippets, generated-file logs, or nested accidental fences.
 
 ## Expected Project Structure
@@ -137,18 +137,34 @@ Never use `ability_input`.
 ```
 
 4. Use `dhali/get-token-and-layout-map` only if token facts are missing or stale.
-5. Use `dhali/get-icon-manifest` only when the pattern includes an Ollie/Outermost icon or custom SVG.
-6. Inspect existing files only for filename collision, project-specific formatting uncertainty, or a requested nearby style match.
-7. Do not scan the full pattern library during routine pattern generation.
+5. Use `dhali/get-editor-safe-block-snippets` when the pattern includes icons, generated SVG, plus CTAs, cover/image cards, or any block that has previously caused editor invalid-content notices.
+6. Use `dhali/get-icon-manifest` only when the pattern includes a known-good Ollie/Outermost icon copied from editor-saved markup or trusted snippets.
+7. Inspect existing files only for filename collision, project-specific formatting uncertainty, or a requested nearby style match.
+8. Do not scan the full pattern library during routine pattern generation.
 
 ### Required validation gate after approval
 
-After the user approves and after writing a PHP pattern file, always run both checks before claiming success:
+After the user approves and after writing a PHP pattern file, always run the complete validation sequence before claiming success:
 
 1. PHP lint on the written file.
-2. MCP block markup validation with `dhali/validate-pattern-markup`.
+2. MCP authoring-rule lint with `dhali/lint-pattern-authoring-rules`.
+3. MCP block parse validation with `dhali/validate-pattern-markup`.
+4. MCP draft editor-context test with `dhali/test-pattern-in-editor-context` when available.
 
-MCP validation shape:
+Authoring-rule lint shape:
+
+```json
+{
+  "ability_name": "dhali/lint-pattern-authoring-rules",
+  "parameters": {
+    "request": "lint_pattern_authoring_rules",
+    "markup": "BLOCK_MARKUP_HERE",
+    "context": "standalone"
+  }
+}
+```
+
+MCP parse validation shape:
 
 ```json
 {
@@ -159,7 +175,21 @@ MCP validation shape:
 }
 ```
 
-If either check fails, do not say the pattern is ready. Report the failure, fix the file, and rerun both checks.
+Editor-context test shape:
+
+```json
+{
+  "ability_name": "dhali/test-pattern-in-editor-context",
+  "parameters": {
+    "request": "test_pattern_in_editor_context",
+    "markup": "BLOCK_MARKUP_HERE",
+    "post_type": "page",
+    "context": "standalone"
+  }
+}
+```
+
+If any check fails, do not say the pattern is ready. Report the failure, fix the file, and rerun the failed checks plus PHP lint.
 
 ### Block validity rules
 
@@ -168,6 +198,142 @@ If either check fails, do not say the pattern is ready. Report the failure, fix 
 - Custom SVG icon blocks must include the saved `<!-- wp:outermost/icon-block ... -->` wrapper and matching closing comment.
 - If the real SVG path data is unavailable, use a simple valid temporary SVG path or ask for the SVG before writing the file.
 - Keep generated PHP strings intact; avoid line wrapping that splits JSON keys, class names, or CSS variable names.
+
+## Pattern Authoring Safety MCP Tools
+
+Use these tools to prevent known editor invalid-content failures before they reach the block editor.
+
+### `dhali/lint-pattern-authoring-rules`
+
+Run this on proposed or written block markup whenever the pattern includes image cards, covers, icons, generated SVG, custom classes, or dynamic post-context blocks.
+
+It should catch project-specific risks such as:
+
+- `core/cover` with `useFeaturedImage:true` in standalone screenshot-based patterns.
+- generated `outermost/icon-block` custom SVG markup.
+- empty SVG shells for named icons.
+- `iconColorValue` or `iconBackgroundColorValue` using CSS variables instead of resolved editor values.
+- placeholder text or placeholder SVG comments.
+- unknown Ollie token slugs.
+- wrapped/truncated CSS variable names or class names.
+
+### `dhali/get-editor-safe-block-snippets`
+
+Use this before composing fragile blocks. Prefer these snippets over inventing markup for:
+
+- generated decorative SVGs (`core/html`)
+- plus-circle CTAs (`core/button`)
+- known-good copied Outermost/Ollie icons
+- static image/cover card guidance
+
+### `dhali/test-pattern-in-editor-context`
+
+Use this after writing, when available, to create a temporary draft page/post containing the block markup and return an edit URL for manual editor verification.
+
+This tool does not replace visual review, but it gives the agent a WordPress-side test target and catches authoring-rule issues before the user opens the editor.
+
+### Featured image and cover rule
+
+Do not use `core/cover` with `useFeaturedImage:true` for standalone screenshot-based patterns unless the user explicitly says the pattern is for a Query Loop, post template, or post-context card.
+
+For screenshot-matched standalone cards:
+
+- Use `core/image` when the image is simply displayed.
+- Use static `core/cover` with explicit `url`, `id`, `sizeSlug`, and saved `<img>` markup when overlay content is needed.
+- Ask for the media URL/id if the screenshot image should be preserved and no asset URL is available.
+
+Only use `useFeaturedImage:true` when the block is inside a Query Loop/post-template context, and label that clearly in the proposal.
+
+## Ollie Editor-Safe Icon and SVG Rules
+
+The WordPress editor serializer is the source of truth for Ollie/Outermost icon blocks. A block can visually resemble valid markup and still show “Block contains unexpected or invalid content” if the saved attributes do not exactly match the block plugin’s `save()` output.
+
+### Hard rule for generated patterns
+
+Do not generate custom `outermost/icon-block` SVG markup from scratch.
+
+Use `outermost/icon-block` only when one of these is true:
+
+1. The exact saved icon block markup was copied from the WordPress editor.
+2. The snippet comes from a trusted manifest of known-good editor-saved markup.
+3. The user provides a known-good saved block snippet and asks to preserve it.
+
+For AI-generated decorative SVGs, use `core/html` with inline SVG instead of `outermost/icon-block`.
+
+For circular plus CTAs, use `core/buttons` + `core/button` with text `+`, not `outermost/icon-block`.
+
+### Editor-saved values must stay editor-saved
+
+When preserving editor-generated Ollie/Outermost markup:
+
+- Preserve hardcoded values if the editor generated them, including `#fbb042`, `#ffffff`, `10px`, `80px`, and negative margins.
+- Preserve `iconColorValue` and `iconBackgroundColorValue` as resolved values, usually hex values.
+- Do not replace `iconColorValue` or `iconBackgroundColorValue` with CSS variables such as `var(--wp--preset--color--primary)`.
+- Preserve wrapper classes, `items-justified-*`, `ollieResponsive`, `ollieCustomClasses`, and matching `className` values when copied from known-good editor markup.
+- Do not invent new `ollieCustomClasses`.
+
+### Named icon rule
+
+Named Outermost/Ollie icons must include the saved SVG path in pattern markup.
+
+Do not output an empty SVG shell and assume the icon library will hydrate it later.
+
+Bad:
+
+```html
+<!-- wp:outermost/icon-block {"iconName":"Plus"} -->
+<div class="wp-block-outermost-icon-block">
+  <div class="icon-container"><svg></svg></div>
+</div>
+<!-- /wp:outermost/icon-block -->
+```
+
+Safer:
+
+- Use a known-good editor-saved named icon block with its full SVG path, or
+- Use a `core/button` for simple CTAs such as `+`.
+
+### Custom SVG rule
+
+For generated custom SVG artwork, prefer this stable pattern:
+
+```html
+<!-- wp:html -->
+<div style="width:56px;line-height:0" aria-hidden="true">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false">
+    <path fill="#7f8b72" d="..."></path>
+  </svg>
+</div>
+<!-- /wp:html -->
+```
+
+Use `outermost/icon-block` for custom SVGs only when copying exact editor-saved custom icon markup, for example `iconName:""` with the full `.wp-block-outermost-icon-block` and `.icon-container` structure from the editor.
+
+### Stable plus CTA pattern
+
+For a circular plus button inside generated patterns, prefer:
+
+```html
+<!-- wp:buttons -->
+<div class="wp-block-buttons">
+  <!-- wp:button {"style":{"color":{"background":"#fff29e","text":"#1E1E26"},"border":{"radius":"var:preset|border-radius|full"},"spacing":{"padding":{"top":"0.65rem","right":"0.85rem","bottom":"0.65rem","left":"0.85rem"}}},"fontSize":"base"} -->
+  <div class="wp-block-button">
+    <a
+      class="wp-block-button__link has-text-color has-background has-base-font-size has-custom-font-size wp-element-button"
+      style="color:#1E1E26;background-color:#fff29e;border-radius:var(--wp--preset--border-radius--full);padding-top:0.65rem;padding-right:0.85rem;padding-bottom:0.65rem;padding-left:0.85rem"
+      >+</a
+    >
+  </div>
+  <!-- /wp:button -->
+</div>
+<!-- /wp:buttons -->
+```
+
+### Validation rule for icons
+
+If a generated pattern contains `outermost/icon-block`, treat it as editor-sensitive.
+
+`php -l` and `parse_blocks()` validation are not enough to prove editor serialization safety for third-party icon blocks. Prefer known-good copied icon markup. If you cannot guarantee the icon block is editor-safe, use `core/html`, `core/image`, or `core/button` instead.
 
 ## Screenshot Reference Workflow
 
@@ -216,7 +382,7 @@ return array(
 
 ### Ollie Icon Block: Named Phosphor Icon
 
-Use when the icon exists in the Ollie library. `iconColorValue` must match the selected color slug.
+Use only when copied from known-good editor-saved markup. The saved SVG path must be present. `iconColorValue` should be the resolved editor value, usually a hex value, not a CSS variable.
 
 ```html
 <div class="wp-block-outermost-icon-block">
@@ -237,7 +403,7 @@ Use when the icon exists in the Ollie library. `iconColorValue` must match the s
 
 ### Ollie Icon Block: Custom SVG with Background Pill
 
-Use when injecting a custom brand SVG. Set `iconName` to an empty string when required by the block’s saved markup.
+Use only when copying exact editor-saved custom SVG icon markup. For AI-generated SVGs, prefer `core/html` instead. Set `iconName` to an empty string when required by the block’s saved markup.
 
 ```html
 <div class="wp-block-outermost-icon-block">
@@ -318,10 +484,13 @@ After the user explicitly says `Approved`:
 
 1. Write the PHP pattern/template/part file.
 2. Run PHP lint on the written file.
-3. For PHP block patterns, extract the generated block markup from the `content` string and execute `dhali/validate-pattern-markup` through MCP.
-4. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present and the SVG contains valid elements, not placeholder comments.
-5. Report lint result and MCP validation result.
-6. Only say the pattern is ready when both checks pass.
+3. For PHP block patterns, extract the generated block markup from the `content` string.
+4. Execute `dhali/lint-pattern-authoring-rules` with the correct context, usually `standalone`.
+5. Execute `dhali/validate-pattern-markup`.
+6. Execute `dhali/test-pattern-in-editor-context` when available.
+7. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present only for known-good editor-saved snippets, and verify every SVG contains real elements, not placeholder comments.
+8. Report PHP lint, authoring-rule lint, parse validation, and editor-context test results.
+9. Only say the pattern is ready when all available checks pass.
 
 Do not skip validation for speed. The final validation calls are cheaper than debugging invalid block recovery in the editor.
 
@@ -337,4 +506,3 @@ Before final output, verify:
 - No invented Ollie token slugs.
 - No broad pattern-library scan when `context.md` has enough information.
 - Any file-write action waits for explicit approval.
-
