@@ -540,6 +540,33 @@ function dhali_mcp_lint_token_references( $markup ) {
 }
 
 /**
+ * Count WordPress block comments while treating self-closing block comments as balanced.
+ *
+ * Valid WordPress syntax includes comments like `<!-- wp:post-title {"isLink":true} /-->`.
+ * These must not be counted as unclosed opening comments.
+ *
+ * @param string $markup Block markup.
+ * @return array{opening: int, closing: int, self_closing: int, balanced: bool}
+ */
+function dhali_mcp_count_block_comments( $markup ) {
+	preg_match_all( '/<!--\s*wp:[^>]*?-->/s', $markup, $opening_matches );
+	preg_match_all( '/<!--\s*\/wp:[^>]*?-->/s', $markup, $closing_matches );
+	preg_match_all( '/<!--\s*wp:[^>]*?\/\s*-->/s', $markup, $self_closing_matches );
+
+	$opening_total = isset( $opening_matches[0] ) ? count( $opening_matches[0] ) : 0;
+	$closing_total = isset( $closing_matches[0] ) ? count( $closing_matches[0] ) : 0;
+	$self_closing  = isset( $self_closing_matches[0] ) ? count( $self_closing_matches[0] ) : 0;
+	$non_self_open = max( 0, $opening_total - $self_closing );
+
+	return array(
+		'opening'      => $non_self_open,
+		'closing'      => $closing_total,
+		'self_closing' => $self_closing,
+		'balanced'     => $non_self_open === $closing_total,
+	);
+}
+
+/**
  * Apply Dhali/Ollie authoring lint rules to proposed block markup.
  *
  * Intentionally stricter than parse_blocks(). Catches project-specific
@@ -563,8 +590,18 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		$issues[] = dhali_mcp_pattern_issue( 'error', 'placeholder_text', 'Markup contains PLACEHOLDER text.' );
 	}
 
-	if ( substr_count( $markup, '<!-- wp:' ) !== substr_count( $markup, '<!-- /wp:' ) ) {
-		$issues[] = dhali_mcp_pattern_issue( 'error', 'block_comment_mismatch', 'Opening and closing block comment counts do not match.' );
+	$comment_counts = dhali_mcp_count_block_comments( $markup );
+	if ( ! $comment_counts['balanced'] ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'block_comment_mismatch',
+			sprintf(
+				'Non-self-closing opening and closing block comment counts do not match. Open: %d, close: %d, self-closing: %d. Self-closing comments ending in /--> are valid and count as balanced.',
+				$comment_counts['opening'],
+				$comment_counts['closing'],
+				$comment_counts['self_closing']
+			)
+		);
 	}
 
 	if ( preg_match( '/\bwp--preset--[a-z-]*-\s/', $markup ) || preg_match( '/has-[a-z-]*-\s/', $markup ) ) {
@@ -1233,7 +1270,7 @@ PHP;
 		// ── dhali/lint-pattern-authoring-rules ───────────────────────────────
 		'dhali/lint-pattern-authoring-rules' => array(
 			'label'               => 'Lint pattern authoring rules',
-			'description'         => 'Applies Dhali/Ollie editor-safety rules to proposed block markup before or after writing a pattern.',
+			'description'         => 'Applies fast Dhali/Ollie editor-safety rules to proposed block markup before or after writing a pattern.',
 			'category'            => 'site',
 			'input_schema'        => array(
 				'type'                 => 'object',

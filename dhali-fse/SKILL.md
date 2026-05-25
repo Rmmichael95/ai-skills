@@ -24,11 +24,11 @@ You are an expert WordPress frontend architect. Your objective is to author prec
 MCP pre-flight requires both discovery and execution:
 
 1. Call `mcp-adapter-discover-abilities`.
-2. Confirm all three validation abilities are registered:
+2. Confirm the two required fast-validation abilities are registered:
    - `dhali/lint-pattern-authoring-rules`
    - `dhali/validate-pattern-markup`
-   - `dhali/test-pattern-in-editor-context`
-3. Prove MCP execute works with one cheap ability call:
+3. Do not require `dhali/test-pattern-in-editor-context` during pre-flight unless the user explicitly asks for deep validation before authoring. Editor-context validation is conditional after fast validation.
+4. Prove MCP execute works with one cheap ability call:
    - Default sanity check: `dhali/get-pattern-template-skeleton` with `{ "request": "pattern_template_skeleton" }`.
    - If the pattern involves icons, SVGs, CTAs, Covers, or fragile serializer-sensitive markup, use `dhali/get-editor-safe-block-snippets` with `{ "request": "editor_safe_block_snippets" }` instead.
 
@@ -121,6 +121,16 @@ If a card is meant for Query Loop or post-template context, use post blocks inst
 
 If the user is matching a standalone screenshot card, use static blocks with real media IDs and static text.
 
+### Query Loop fast path
+
+If the visual/source looks like a post list or post card grid with featured image, category, date, title, excerpt, or read-more, use the Query Loop fast path:
+
+1. Use native post blocks (`core/query`, `core/post-template`, `core/post-featured-image`, `core/post-terms`, `core/post-date`, `core/post-title`, `core/post-excerpt`, `core/read-more`).
+2. Do not build static card markup unless the user explicitly asks for a standalone/static card.
+3. Do not fetch Cover/icon snippets unless the pattern actually uses Cover, Outermost icons, custom SVGs, or CTA/icon composition.
+4. Inspect existing files only for filename collision or a specifically requested style match.
+5. Prefer simple self-closing dynamic post blocks when WordPress supports them. The validator must treat `<!-- wp:block {attrs} /-->` as balanced.
+
 ## Context Cache Workflow
 
 Before running broad discovery, check for a project context cache.
@@ -205,21 +215,26 @@ Never use `ability_input`.
 
 ### Required validation gate after approval
 
-After the user approves, **do not write immediately**. First confirm the WordPress MCP server is connected, the validation abilities are available, and at least one cheap MCP execute sanity call still succeeds. If MCP is disconnected, any required validation ability is missing, or discovery works but execute fails, stop before writing and ask the user to reconnect MCP. Do not write a pattern that cannot be linted and smoke-tested.
+After the user approves, confirm the WordPress MCP server is connected, the two fast-validation abilities are available, and at least one cheap MCP execute sanity call still succeeds. If MCP is disconnected, a required fast-validation ability is missing, or discovery works but execute fails, stop before writing and ask the user to reconnect MCP.
 
-Required abilities before writing:
+Required fast-validation abilities before writing:
 
 - `dhali/lint-pattern-authoring-rules`
 - `dhali/validate-pattern-markup`
-- `dhali/test-pattern-in-editor-context`
 
-Once MCP availability is confirmed, run the complete validation sequence before claiming success:
+`dhali/test-pattern-in-editor-context` is **not required by default**. It is an optional deep check that should be run only when the pattern is serializer-sensitive, fast validation reports warnings/errors, the user explicitly asks for deep validation, or a new untrusted snippet is being tested.
+
+### Fast validation workflow
+
+Default to fast validation. Run checks sequentially and stop early on failure:
 
 1. Write the PHP pattern file.
-2. PHP lint on the written file.
-3. MCP authoring-rule lint with `dhali/lint-pattern-authoring-rules`.
-4. MCP block parse validation with `dhali/validate-pattern-markup`.
-5. MCP draft editor-context test with `dhali/test-pattern-in-editor-context`.
+2. Run `php -l` on PHP pattern files. If PHP lint fails, fix it before any MCP validation.
+3. Run `dhali/lint-pattern-authoring-rules`. If it returns errors, fix them before parse validation.
+4. Run `dhali/validate-pattern-markup`. If it fails, fix it before any deep validation.
+5. Report: `Fast validation passed`.
+
+Fast validation is the normal required gate. Do not run all MCP checks in parallel by default. Sequential checks reduce MCP disconnects and wasted tokens.
 
 Authoring-rule lint shape:
 
@@ -240,9 +255,31 @@ MCP parse validation shape:
 {
   "ability_name": "dhali/validate-pattern-markup",
   "parameters": {
-    "markup": "BLOCK_MARKUP_HERE"
+    "markup": "BLOCK_MARKUP_HERE",
+    "context": "standalone"
   }
 }
+```
+
+### Conditional deep editor-context validation
+
+Run `dhali/test-pattern-in-editor-context` only when one or more of these are true:
+
+- The user explicitly asks for deep/editor validation.
+- Fast validation returns warnings or errors.
+- The pattern uses a new or untrusted fragile snippet.
+- The pattern includes serializer-sensitive blocks/compositions such as:
+  - `core/cover`
+  - `outermost/icon-block`
+  - manually styled `core/buttons` / `core/button`
+  - linked `core/group` with `href`, `linkDestination`, or `animationType`
+  - block bindings or experimental attributes
+  - complex Query Loop/post-template markup that is not copied from a known-good Ollie/current-site snippet
+
+When skipped, report exactly:
+
+```text
+Fast validation passed. Editor-context validation skipped because no required deep-validation trigger was present. Manual editor check is still recommended for visual confirmation.
 ```
 
 Editor-context test shape:
@@ -259,7 +296,11 @@ Editor-context test shape:
 }
 ```
 
-If any check fails, do not say the pattern is ready. Report the failure, fix the file, and rerun the failed checks plus PHP lint.
+If any check fails, do not say the pattern is ready. Report the failure, fix the file, and rerun only the failed check plus any prerequisite checks needed to prove the fix.
+
+### Block comment balance rule
+
+Self-closing block comments ending in `/-->` are valid WordPress block syntax and count as balanced. Do not rewrite self-closing dynamic blocks into explicit open/close pairs just to satisfy a naive count check.
 
 ### Block validity rules
 
@@ -330,9 +371,9 @@ For simple circular plus CTAs:
 
 ### `dhali/test-pattern-in-editor-context`
 
-Use this after writing, when available, to create a temporary draft page/post containing the block markup and return an edit URL for manual editor verification.
+Use this only as conditional deep validation. It creates a temporary draft page/post containing the block markup and returns an edit URL for manual editor verification.
 
-This tool does not replace visual review, but it gives the agent a WordPress-side test target and catches authoring-rule issues before the user opens the editor.
+Do not run it by default. Run it only when the pattern contains serializer-sensitive blocks/compositions, fast validation produced warnings/errors, the user explicitly asks for editor-context validation, or a new untrusted snippet is being tested. This tool does not replace visual review.
 
 ### Featured image and Cover rule
 
@@ -660,24 +701,20 @@ Rules:
 
 ## Post-Approval Write and Validation Workflow
 
-After the user explicitly says `Approved`:
+Use fast validation by default. Do not run expensive editor-context validation unless a deep-validation trigger is present.
 
-1. Reconfirm the WordPress MCP server is connected.
-2. Reconfirm these abilities exist:
+1. Reconfirm MCP discovery and one cheap execute sanity call before writing.
+2. Confirm required fast-validation abilities are available:
    - `dhali/lint-pattern-authoring-rules`
    - `dhali/validate-pattern-markup`
-   - `dhali/test-pattern-in-editor-context`
-3. Run one cheap MCP execute sanity check again: `dhali/get-pattern-template-skeleton` or `dhali/get-editor-safe-block-snippets`.
-4. If any validation ability is unavailable, or if discovery works but execute fails, stop before writing and ask the user to reconnect MCP. Do not write and then say validation was skipped.
-5. Write the PHP pattern/template/part file only after MCP validation availability and execute sanity are confirmed.
-6. Run PHP lint on the written file when the file is PHP.
-7. For PHP block patterns, extract the generated block markup from the `content` string.
-8. Execute `dhali/lint-pattern-authoring-rules` with the correct context, usually `standalone`.
-9. Execute `dhali/validate-pattern-markup`.
-10. Execute `dhali/test-pattern-in-editor-context`.
-11. If the pattern uses an icon, verify the full `outermost/icon-block` wrapper is present only for known-good editor-saved snippets, and verify every SVG contains real elements, not placeholder comments.
-12. Report PHP lint, authoring-rule lint, parse validation, and editor-context test results.
-13. Only say the pattern is ready when all checks pass. Do not skip validation for speed. Do not suggest manual editor testing as a substitute for skipped MCP checks.
+3. Write the approved file.
+4. Run `php -l` for PHP pattern files.
+5. Run `dhali/lint-pattern-authoring-rules`. Stop and fix errors before continuing.
+6. Run `dhali/validate-pattern-markup`. Stop and fix errors before continuing.
+7. Decide whether deep validation is required. Run `dhali/test-pattern-in-editor-context` only for serializer-sensitive blocks, warnings/errors, explicit user requests, or new untrusted snippets.
+8. Report concise results. Include whether editor-context validation was run or skipped and why.
+
+Do not run MCP validation calls in parallel by default. Sequential checks are preferred for speed, cleaner failure isolation, and fewer MCP disconnects.
 
 ## Quality Checklist
 
