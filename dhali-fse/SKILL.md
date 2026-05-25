@@ -9,12 +9,15 @@ You are an expert WordPress frontend architect. Your objective is to author prec
 
 ## Prime Directives
 
+- **Static-first:** When working from a screenshot or visual reference, always author a static visual pattern first. Do not create a Query Loop, post template, archive grid, or any dynamic post-context output unless the user explicitly asks for it.
+- **Intent beats appearance:** Do not infer dynamic behavior from visual styling alone. A card that contains an image, category, date, title, and read-more link is a static visual source by default, not a dynamic post block.
+- **Preserve visual containment:** If an element visually appears inside another region — a badge inside an image, text over a cover, an icon inside a pill — that containment must be preserved in the block structure. Do not silently move overlaid or nested elements outside their source container.
 - **No emojis:** Never use emojis anywhere in generated code, comments, docs, or final pattern content.
 - **No guessing:** Use the existing context file first, then WordPress MCP abilities for small live facts, then `@wp_cli` only when MCP lacks the needed fact.
 - **No invented tokens:** Use the Ollie Pro token slugs listed in this skill. Do not invent CSS classes, preset slugs, color hexes, or spacing names.
 - **No unapproved writes:** For pattern/template work, propose the 4-part structure first. Do not write to the filesystem until the user explicitly approves.
 - **Smallest safe edit:** For repair or design-tuning passes on a working pattern, edit only the smallest necessary block/style value. Do not regenerate the whole pattern unless the user explicitly asks.
-- **Prefer native WordPress:** Prefer core blocks, block bindings, pattern overrides, template parts, and theme.json-compatible attributes before custom blocks or custom CSS. Do not default to `core/html` for CTAs. Use editor-copied/current-site snippets, Ollie pattern examples, and native block composition before falling back to custom HTML.
+- **Prefer native WordPress:** Prefer core blocks, block bindings, pattern overrides, template parts, and theme.json-compatible attributes before custom blocks or custom CSS. Do not default to `core/html` for CTAs.
 - **Keep output clean:** Do not wrap final Markdown in Python snippets, generated-file logs, or nested accidental fences.
 
 ## Session Pre-flight
@@ -27,18 +30,16 @@ MCP pre-flight requires both discovery and execution:
 2. Confirm the two required fast-validation abilities are registered:
    - `dhali/lint-pattern-authoring-rules`
    - `dhali/validate-pattern-markup`
-3. Do not require `dhali/test-pattern-in-editor-context` during pre-flight unless the user explicitly asks for deep validation before authoring. Editor-context validation is conditional after fast validation.
+3. `dhali/test-pattern-in-editor-context` is not required during pre-flight. It is conditional after fast validation.
 4. Prove MCP execute works with one cheap ability call:
-   - Default sanity check: `dhali/get-pattern-template-skeleton` with `{ "request": "pattern_template_skeleton" }`.
-   - If the pattern involves icons, SVGs, CTAs, Covers, or fragile serializer-sensitive markup, use `dhali/get-editor-safe-block-snippets` with `{ "request": "editor_safe_block_snippets" }` instead.
+   - Default: `dhali/get-pattern-template-skeleton` with `{ "request": "pattern_template_skeleton" }`.
+   - If the pattern involves icons, SVGs, CTAs, Covers, or fragile serializer-sensitive markup: `dhali/get-editor-safe-block-snippets` with `{ "request": "editor_safe_block_snippets" }`.
 
-If any ability is missing, MCP is disconnected, or discovery succeeds but execute fails → **STOP**. Tell the user to reconnect MCP. Do not generate a proposal. Do not read nearby patterns as a substitute. Do not generate fragile markup from memory. Do not proceed.
+If any ability is missing, MCP is disconnected, or discovery succeeds but execute fails → **STOP**. Tell the user to reconnect MCP. Do not generate a proposal. Do not read nearby patterns as a substitute. Do not proceed.
 
 If discovery and execute both succeed → continue to Context Cache Workflow.
 
 ## Expected Project Structure
-
-Assume this skill may be installed as a Claude-style skill folder:
 
 ```text
 dhali-fse/
@@ -58,17 +59,8 @@ Use `~/pictures/blocks/` as a visual reference library when the user asks for bl
 
 Map design requirements strictly to these predefined Ollie Pro slugs unless live project context proves otherwise.
 
-**Block attribute format:**
-
-```text
-var:preset|category|slug
-```
-
-**Inline CSS variable format:**
-
-```css
-var(--wp--preset--category--slug)
-```
+**Block attribute format:** `var:preset|category|slug`
+**Inline CSS variable format:** `var(--wp--preset--category--slug)`
 
 | Category        | Available Slugs                                                              |
 | :-------------- | :--------------------------------------------------------------------------- |
@@ -83,9 +75,57 @@ var(--wp--preset--category--slug)
 | Light Shadows   | `small-light`, `medium-light`, `large-light`, `extra-large-light`            |
 | Dark Shadows    | `small-dark`, `medium-dark`, `large-dark`, `extra-large-dark`                |
 
-## Ollie Pattern Source Rules
+## Static-First Authoring
 
-Use Ollie and current-site editor output as serializer references.
+### Default: static visual pattern
+
+When the source is a screenshot, description, or visual reference, build a static visual pattern first. This applies even when the visual contains elements that appear blog-like (image, category, date, title, excerpt, read-more). Those are visual traits, not intent signals.
+
+Do not create `core/query`, `core/post-template`, or any other dynamic post-context blocks unless the user explicitly uses one of these phrases:
+
+- "Query Loop"
+- "dynamic posts"
+- "latest posts"
+- "archive" or "blog grid"
+- "post template"
+- "convert to dynamic"
+- "use post blocks"
+
+### Visual containment rule
+
+If an element is visually inside another region in the source — a badge overlaid on an image, a label inside a card image, text rendered over a cover — that nesting must be preserved in the block structure.
+
+For elements overlaid on an image:
+
+- Use `core/cover` with the element inside `wp-block-cover__inner-container`.
+- Do not use `core/image` for this case: `core/image` cannot contain inner blocks.
+- Use trusted or editor-copied `core/cover` markup. Do not generate Cover saved markup from memory.
+
+Do not move an element below its source container to make the block structure simpler. If the block constraint (for example, `core/post-featured-image` cannot contain inner blocks) prevents reproducing the overlay, stop and explain the limitation rather than silently changing the layout.
+
+### Stage 2: Query Loop conversion
+
+After the user approves and the static pattern is complete, a separate "convert to Query Loop" step may be requested. When it is:
+
+1. Use the approved static pattern as the source of truth. Do not redesign.
+2. Preserve spacing, radius, image treatment, badge placement, typography, shadow, and CTA structure from the approved static version.
+3. Map static content blocks to their post block equivalents only where the mapping is clean.
+4. If a dynamic block cannot reproduce an overlay or containment from the static card (for example, a badge inside a featured image), stop and explain the limitation. Do not silently move the element.
+5. `core/query` and `core/post-template` always trigger deep editor-context validation regardless of other conditions.
+
+### Self-closing post blocks
+
+Prefer self-closing dynamic post blocks when WordPress supports them:
+
+```html
+<!-- wp:post-title {"level":3,"isLink":true} /-->
+<!-- wp:post-date /-->
+<!-- wp:post-terms {"term":"category"} /-->
+```
+
+Self-closing block comments ending in `/-->` are valid WordPress block syntax and count as balanced. Do not rewrite them into explicit open/close pairs.
+
+## Ollie Pattern Source Rules
 
 Preferred source order when a block shape is uncertain:
 
@@ -95,11 +135,11 @@ Preferred source order when a block shape is uncertain:
 4. Ollie upstream `/patterns` examples.
 5. Generated core block markup only when the block shape is simple and serializer-stable.
 
-Do not normalize editor/Ollie markup into a cleaner-looking version if the editor produced the original shape. Preserve wrapper classes, block support attributes, hardcoded editor values, and block comments unless the user explicitly asks for a structural change.
+Do not normalize editor/Ollie markup into a cleaner-looking version. Preserve wrapper classes, block support attributes, hardcoded editor values, and block comments unless the user explicitly asks for a structural change.
 
 ### Ollie card skeleton rule
 
-For card-like patterns, default to the Ollie style of composition:
+For card-like patterns:
 
 - Outer `core/group` with `metadata.name` where useful.
 - Tokenized padding, radius, border, shadow, and background.
@@ -110,7 +150,7 @@ For card-like patterns, default to the Ollie style of composition:
 
 ### Post card rule
 
-If a card is meant for Query Loop or post-template context, use post blocks instead of static substitutes:
+If a card is meant for Query Loop or post-template context, use post blocks:
 
 - `core/post-featured-image`
 - `core/post-title`
@@ -118,18 +158,9 @@ If a card is meant for Query Loop or post-template context, use post blocks inst
 - `core/post-author`
 - `core/post-excerpt`
 - `core/post-terms`
+- `core/read-more`
 
 If the user is matching a standalone screenshot card, use static blocks with real media IDs and static text.
-
-### Query Loop fast path
-
-If the visual/source looks like a post list or post card grid with featured image, category, date, title, excerpt, or read-more, use the Query Loop fast path:
-
-1. Use native post blocks (`core/query`, `core/post-template`, `core/post-featured-image`, `core/post-terms`, `core/post-date`, `core/post-title`, `core/post-excerpt`, `core/read-more`).
-2. Do not build static card markup unless the user explicitly asks for a standalone/static card.
-3. Do not fetch Cover/icon snippets unless the pattern actually uses Cover, Outermost icons, custom SVGs, or CTA/icon composition.
-4. Inspect existing files only for filename collision or a specifically requested style match.
-5. Prefer simple self-closing dynamic post blocks when WordPress supports them. The validator must treat `<!-- wp:block {attrs} /-->` as balanced.
 
 ## Context Cache Workflow
 
@@ -145,7 +176,7 @@ test -d "$HOME/pictures/blocks" && find "$HOME/pictures/blocks" -maxdepth 2 -typ
 
 ### Cache hit
 
-Read `context.md`. Use `@wp_cli` only for runtime facts not present in the cache. Do not rescan the full pattern library unless the task requires it.
+Read `context.md`. Use `@wp_cli` only for runtime facts not present in the cache. Do not rescan the full pattern library.
 
 ### Cache miss
 
@@ -156,23 +187,9 @@ Run only lightweight discovery:
 @wp_cli core_version
 ```
 
-Then create or propose `{WP_ROOT}/context.md` with the basic environment state:
-
-```markdown
-# WordPress Project Context
-
-- Core Version:
-- Active Theme:
-- Plugin Path:
-- Pattern Library Path:
-- Notes:
-```
-
-Keep the cache under 500 words. Do not paste the full pattern library into context.
+Then create or propose `{WP_ROOT}/context.md` with basic environment state. Keep the cache under 500 words. Do not paste the full pattern library into context.
 
 ## MCP Fast Path for Pattern Authoring
-
-Use MCP for small, structured facts before broad file scans.
 
 Mandatory MCP execution shape:
 
@@ -189,52 +206,48 @@ Never use `ability_input`.
 
 ### Pattern setup order
 
-1. **Pre-flight confirmed** in Session Pre-flight above. If skipped for any reason, run it now before proceeding.
+1. **Pre-flight confirmed** in Session Pre-flight above.
+2. **Context:** Read the project context file if it exists:
+   - `{project-name}_context.md` → `context.md`
+     If the file has active theme + token slugs, treat those facts as current and skip matching MCP fetches.
+3. **Targeted MCP fetches:** Skip any row whose data is already in context.
 
-2. **Context:** Read the project context file if it exists and is concise:
-   - `{project-name}_context.md`
-   - `context.md`
-     If the file has active theme + token slugs, treat those facts as current and skip the matching MCP fetches below.
-
-3. **Targeted MCP fetches:** Skip any row whose data is already in the context file.
-
-   | Needed fact                     | MCP ability                            | When to call                                       |
-   | :------------------------------ | :------------------------------------- | :------------------------------------------------- |
-   | Core/PHP/theme/layout snapshot  | `dhali/get-project-snapshot`           | **Fallback:** Only if `dhali/sync-context` failed  |
-   | Site title or active theme name | `dhali/get-site-info`                  | **Fallback:** Not in context                       |
-   | Token slugs or layout settings  | `dhali/get-token-and-layout-map`       | **Fallback:** Not in context or context shows gaps |
-   | PHP return-array skeleton       | `dhali/get-pattern-template-skeleton`  | Every new PHP pattern — always call                |
-   | Fragile block snippets          | `dhali/get-editor-safe-block-snippets` | Pattern includes icons, SVGs, CTAs, covers         |
-   | Known-good named icon           | `dhali/get-icon-manifest`              | Pattern copies an editor-saved icon                |
+   | Needed fact                     | MCP ability                            | When to call                                   |
+   | :------------------------------ | :------------------------------------- | :--------------------------------------------- |
+   | Core/PHP/theme/layout snapshot  | `dhali/get-project-snapshot`           | Fallback: only if sync-context failed          |
+   | Site title or active theme name | `dhali/get-site-info`                  | Fallback: not in context                       |
+   | Token slugs or layout settings  | `dhali/get-token-and-layout-map`       | Fallback: not in context or context shows gaps |
+   | PHP return-array skeleton       | `dhali/get-pattern-template-skeleton`  | Every new PHP pattern — always call            |
+   | Local image filenames           | `dhali/get-local-assets`               | Every pattern that references images           |
+   | Fragile block snippets          | `dhali/get-editor-safe-block-snippets` | Pattern includes icons, SVGs, CTAs, covers     |
+   | Known-good named icon           | `dhali/get-icon-manifest`              | Pattern copies an editor-saved icon            |
 
 4. Use `@wp_cli` only when MCP does not expose the needed fact.
-
 5. Inspect existing files only for filename collision or a requested nearby style match. Do not scan the full pattern library.
-
-6. Show the required four-part proposal (see Authoring Protocol). Do not write the file until the user explicitly approves.
+6. Show the required four-part proposal. Do not write until the user explicitly approves.
 
 ### Required validation gate after approval
 
-After the user approves, confirm the WordPress MCP server is connected, the two fast-validation abilities are available, and at least one cheap MCP execute sanity call still succeeds. If MCP is disconnected, a required fast-validation ability is missing, or discovery works but execute fails, stop before writing and ask the user to reconnect MCP.
+After approval, confirm MCP is connected and fast-validation abilities are available before writing.
 
-Required fast-validation abilities before writing:
+Required fast-validation abilities:
 
 - `dhali/lint-pattern-authoring-rules`
 - `dhali/validate-pattern-markup`
 
-`dhali/test-pattern-in-editor-context` is **not required by default**. It is an optional deep check that should be run only when the pattern is serializer-sensitive, fast validation reports warnings/errors, the user explicitly asks for deep validation, or a new untrusted snippet is being tested.
+`dhali/test-pattern-in-editor-context` is not required by default. Run it only when the pattern is serializer-sensitive, fast validation returns warnings/errors, the user explicitly asks, or a new untrusted snippet is being tested.
 
 ### Fast validation workflow
 
-Default to fast validation. Run checks sequentially and stop early on failure:
+Default to fast validation. Run sequentially and stop on failure:
 
 1. Write the PHP pattern file.
-2. Run `php -l` on PHP pattern files. If PHP lint fails, fix it before any MCP validation.
-3. Run `dhali/lint-pattern-authoring-rules`. If it returns errors, fix them before parse validation.
-4. Run `dhali/validate-pattern-markup`. If it fails, fix it before any deep validation.
+2. Run `php -l`. If it fails, fix before any MCP validation.
+3. Run `dhali/lint-pattern-authoring-rules`. Fix errors before parse validation.
+4. Run `dhali/validate-pattern-markup`. Fix errors before any deep validation.
 5. Report: `Fast validation passed`.
 
-Fast validation is the normal required gate. Do not run all MCP checks in parallel by default. Sequential checks reduce MCP disconnects and wasted tokens.
+Do not run MCP checks in parallel by default.
 
 Authoring-rule lint shape:
 
@@ -263,23 +276,23 @@ MCP parse validation shape:
 
 ### Conditional deep editor-context validation
 
-Run `dhali/test-pattern-in-editor-context` only when one or more of these are true:
+Run `dhali/test-pattern-in-editor-context` when any of these are true:
 
+- **Always:** The pattern uses `core/query` or `core/post-template`.
 - The user explicitly asks for deep/editor validation.
 - Fast validation returns warnings or errors.
 - The pattern uses a new or untrusted fragile snippet.
-- The pattern includes serializer-sensitive blocks/compositions such as:
+- The pattern includes serializer-sensitive compositions such as:
   - `core/cover`
   - `outermost/icon-block`
   - manually styled `core/buttons` / `core/button`
   - linked `core/group` with `href`, `linkDestination`, or `animationType`
   - block bindings or experimental attributes
-  - complex Query Loop/post-template markup that is not copied from a known-good Ollie/current-site snippet
 
 When skipped, report exactly:
 
 ```text
-Fast validation passed. Editor-context validation skipped because no required deep-validation trigger was present. Manual editor check is still recommended for visual confirmation.
+Fast validation passed. Editor-context validation skipped — no required deep-validation trigger present. Manual editor check recommended.
 ```
 
 Editor-context test shape:
@@ -296,157 +309,117 @@ Editor-context test shape:
 }
 ```
 
-If any check fails, do not say the pattern is ready. Report the failure, fix the file, and rerun only the failed check plus any prerequisite checks needed to prove the fix.
-
-### Block comment balance rule
-
-Self-closing block comments ending in `/-->` are valid WordPress block syntax and count as balanced. Do not rewrite self-closing dynamic blocks into explicit open/close pairs just to satisfy a naive count check.
+If any check fails, report the failure, fix the file, and rerun only the failed check plus prerequisite checks.
 
 ### Block validity rules
 
+- Self-closing block comments ending in `/-->` are valid and count as balanced.
+- Do not rewrite self-closing dynamic blocks into explicit open/close pairs.
 - Do not place placeholder comments inside `<svg>` markup in final saved block content.
-- Do not leave truncated class names, broken JSON, wrapped line fragments, or placeholder paths in final block markup.
+- Do not leave truncated class names, broken JSON, wrapped line fragments, or placeholder paths in final markup.
 - Custom SVG icon blocks must include the saved `<!-- wp:outermost/icon-block ... -->` wrapper and matching closing comment.
-- If the real SVG path data is unavailable, use a simple valid temporary SVG path or ask for the SVG before writing the file.
 - Keep generated PHP strings intact; avoid line wrapping that splits JSON keys, class names, or CSS variable names.
 
 ## Pattern Authoring Safety MCP Tools
 
-Use these tools to prevent known editor invalid-content failures before they reach the block editor.
-
 ### `dhali/lint-pattern-authoring-rules`
 
-Run this on proposed or written block markup whenever the pattern includes image cards, covers, icons, generated SVG, custom classes, or dynamic post-context blocks.
+Run on proposed or written block markup whenever the pattern includes image cards, covers, icons, generated SVG, custom classes, or dynamic post-context blocks. Catches:
 
-It should catch project-specific risks such as:
-
-- `core/cover` with `useFeaturedImage:true` in standalone screenshot-based patterns.
-- `core/cover` or `core/image` using `id:0` or saved `wp-image-0` markup.
-- Remote placeholder image URLs such as `picsum.photos`, `placehold.co`, `placeholder.com`, `loremflickr.com`, or `dummyimage.com`.
-- Generated block-level `style.css` such as `"css":"overflow:hidden;"` unless copied from known-good editor-saved markup.
-- Standalone image/cover blocks that use a URL without a real attachment ID.
+- `core/cover` with `useFeaturedImage:true` in standalone patterns.
+- `id:0` or `wp-image-0` in saved markup.
+- Remote placeholder image URLs.
+- Generated block-level `style.css` such as `"css":"overflow:hidden;"`.
 - Generated `outermost/icon-block` custom SVG markup.
 - Empty SVG shells for named icons.
-- `iconColorValue` or `iconBackgroundColorValue` using CSS variables instead of resolved editor values.
-- Placeholder text or placeholder SVG comments.
+- `iconColorValue` or `iconBackgroundColorValue` using CSS variables instead of resolved hex values.
 - Unknown Ollie token slugs.
 - Wrapped/truncated CSS variable names or class names.
 
+### `dhali/get-local-assets`
+
+Call before writing any pattern that references images. Returns available filenames from the Ollie theme's `patterns/images/` directory. Use only confirmed filenames. Do not invent image filenames or use remote URLs.
+
 ### `dhali/get-editor-safe-block-snippets`
 
-Use this before composing fragile blocks. Prefer these snippets over inventing serializer-sensitive markup for:
+Use before composing fragile blocks. Prefer these snippets over inventing serializer-sensitive markup for:
 
-- Plus-circle CTAs as native linked `core/group` + known-good icon block.
-- Known-good copied Outermost/Ollie icons with full SVG paths.
+- Circular plus CTAs (`plus-cta-circle-button`) — a serializer-safe native `core/buttons` + `core/button` composition.
+- Known-good Outermost/Ollie icons with full SVG paths.
 - Editor-safe Cover snippets.
-- Simple Ollie button examples copied from upstream/current editor output.
-- Decorative SVG fallback only when no block-native/editor-safe icon exists.
+- Simple Ollie button examples.
+- Decorative SVG fallback (`custom-svg-via-core-html`).
 
-For circular plus CTAs, fetch this ability and copy `plus-cta-linked-group-icon` exactly unless the user provides a better current-site editor-copied CTA snippet. Do not default to `core/html` for CTAs. Do not manually recreate a custom styled `core/button` plus CTA from memory.
+Do not use `core/html` as a default CTA solution. Do not manually generate custom styled button plus markup from memory.
 
 ### CTA and button safety rule
-
-Use native WordPress button or linked block composition. `core/html` is a diagnostic fallback, not a default CTA strategy.
 
 Allowed:
 
 1. Ollie/editor-copied `core/buttons` + `core/button` markup.
-2. Simple `core/button` markup using known Ollie/editor classes such as `is-style-fill`, `is-style-button-light`, `is-style-secondary-button`, or project-defined style classes.
-3. Linked `core/group` + known-good `outermost/icon-block` when the editor supports `href`, `linkDestination`, and `animationType` on Group.
+2. `core/button` using known Ollie classes: `is-style-fill`, `is-style-button-light`, `is-style-secondary-button`.
+3. `plus-cta-circle-button` from `dhali/get-editor-safe-block-snippets` for circular plus CTAs.
 4. Plain paragraph links for simple text CTAs.
 
 Avoid:
 
-- Generated custom plus `core/button` markup with custom color, custom padding, preset `fontSize`, and hand-assembled classes unless copied from the editor.
-- `core/html` as a default CTA solution.
+- Manually assembled `core/button` plus markup with custom inline colors and padding generated from memory.
+- `core/html` as a CTA fallback unless explicitly requested as diagnostic.
+- Linked `core/group` with `href`/`linkDestination`/`animationType` unless copied exactly from current editor output.
 
 ### Plus CTA safety rule
 
-For simple circular plus CTAs:
+For circular plus CTAs:
 
-1. Prefer the `plus-cta-linked-group-icon` snippet from `dhali/get-editor-safe-block-snippets`.
-2. Preserve the linked group wrapper, `href`, `linkDestination`, `animationType`, padding, radius, icon wrapper, `wordpress-plus` icon name, width, and saved SVG path exactly.
-3. Use `core/button` only when exact saved button markup was copied from the current WordPress editor or trusted Ollie/current-site snippet.
-4. Use `core/html` only as a temporary diagnostic fallback when explicitly requested.
+1. Fetch `dhali/get-editor-safe-block-snippets` and copy `plus-cta-circle-button` exactly.
+2. Do not use the deprecated `plus-cta-linked-group-icon` snippet.
+3. Use `core/html` only as a temporary diagnostic fallback when explicitly requested.
 
 ### `dhali/test-pattern-in-editor-context`
 
-Use this only as conditional deep validation. It creates a temporary draft page/post containing the block markup and returns an edit URL for manual editor verification.
-
-Do not run it by default. Run it only when the pattern contains serializer-sensitive blocks/compositions, fast validation produced warnings/errors, the user explicitly asks for editor-context validation, or a new untrusted snippet is being tested. This tool does not replace visual review.
+Conditional deep validation only. Creates a temporary draft page containing the block markup and returns an edit URL. Does not run by default. See "Conditional deep editor-context validation" for triggers.
 
 ### Featured image and Cover rule
 
-Do not use `core/cover` with `useFeaturedImage:true` for standalone screenshot-based patterns unless the user explicitly says the pattern is for a Query Loop, post template, or post-context card.
+Do not use `core/cover` with `useFeaturedImage:true` for standalone patterns.
 
-For screenshot-matched standalone cards:
+For screenshot-matched standalone cards with a badge or label inside the image:
 
-- Use `core/image` when the image is simply displayed.
-- Use `core/cover` only when overlay content is needed and the markup is copied from the editor, supplied by the user, or returned by `dhali/get-editor-safe-block-snippets`.
-- Ask for the media URL/id if the screenshot image should be preserved and no asset URL is available.
+- Use `core/cover` with the badge inside `wp-block-cover__inner-container`.
+- Use trusted or editor-copied Cover markup. Do not generate Cover saved markup from memory.
+- Preserve the serializer shape: `wp:cover` attributes, `wp-block-cover` wrapper classes, `is-light`/`is-dark`, `wp-block-cover__image-background`, `wp-block-cover__background`, and `wp-block-cover__inner-container`.
 
-Core Cover safety:
+For screenshot-matched standalone cards with no overlay content:
 
-- Do not generate final `core/cover` saved markup from memory.
-- Editor-copied or trusted-snippet Cover markup is allowed.
-- Preserve the Cover serializer shape exactly: `wp:cover` attributes, `wp-block-cover` wrapper classes, `has-custom-content-position`, `is-position-*`, `is-light`/`is-dark`, `wp-block-cover__image-background`, `wp-image-*`, `size-*`, `wp-block-cover__background`, and `wp-block-cover__inner-container`.
-- Do not normalize editor-saved Cover markup into an idealized version.
-- For design-tuning passes on a working Cover block, edit only nested child spacing/content unless the user explicitly asks to change the image, overlay, or Cover structure.
+- Use `core/image`.
 
-Only use `useFeaturedImage:true` when the block is inside a Query Loop/post-template context, and label that clearly in the proposal.
+Only use `useFeaturedImage:true` inside Query Loop/post-template context, and label that clearly in the proposal.
 
 ## Ollie Editor-Safe Icon and SVG Rules
 
-The WordPress editor serializer is the source of truth for Ollie/Outermost icon blocks. A block can visually resemble valid markup and still show "Block contains unexpected or invalid content" if the saved attributes do not exactly match the block plugin's `save()` output.
+### Hard rule
 
-### Hard rule for generated patterns
-
-Do not generate custom `outermost/icon-block` SVG markup from scratch.
-
-Use `outermost/icon-block` only when one of these is true:
+Do not generate custom `outermost/icon-block` SVG markup from scratch. Use `outermost/icon-block` only when:
 
 1. The exact saved icon block markup was copied from the WordPress editor.
-2. The snippet comes from a trusted manifest of known-good editor-saved markup.
-3. The user provides a known-good saved block snippet and asks to preserve it.
-
-For AI-generated decorative SVGs, prefer a current-site editor-copied `outermost/icon-block` custom SVG snippet when available. Use `core/html` only when no block-native/editor-safe icon snippet exists.
-
-For circular plus CTAs, use the trusted `plus-cta-linked-group-icon` snippet: linked `core/group` wrapper plus a known-good `outermost/icon-block` using `wordpress-plus` with the full saved SVG path. Do not use `core/html` as the default CTA solution.
+2. The snippet comes from `dhali/get-editor-safe-block-snippets` or `dhali/get-icon-manifest`.
+3. The user provides a known-good saved block snippet.
 
 ### Editor-saved values must stay editor-saved
 
-When preserving editor-generated Ollie/Outermost markup:
-
-- Preserve hardcoded values if the editor generated them, including `#fbb042`, `#ffffff`, `10px`, `80px`, and negative margins.
-- Preserve `iconColorValue` and `iconBackgroundColorValue` as resolved values, usually hex values.
-- Do not replace `iconColorValue` or `iconBackgroundColorValue` with CSS variables such as `var(--wp--preset--color--primary)`.
-- Preserve wrapper classes, `items-justified-*`, `ollieResponsive`, `ollieCustomClasses`, and matching `className` values when copied from known-good editor markup.
+- Preserve hardcoded values the editor generated, including hex colors, `px` values, and negative margins.
+- Preserve `iconColorValue` and `iconBackgroundColorValue` as resolved hex values, not CSS variables.
+- Do not replace `iconColorValue` with `var(--wp--preset--color--primary)`.
+- Preserve `ollieCustomClasses`, `ollieResponsive`, `items-justified-*`, and matching `className` values.
 - Do not invent new `ollieCustomClasses`.
 
 ### Named icon rule
 
-Named Outermost/Ollie icons must include the saved SVG path in pattern markup.
-
-Do not output an empty SVG shell and assume the icon library will hydrate it later.
-
-Bad:
-
-```html
-<!-- wp:outermost/icon-block {"iconName":"Plus"} -->
-<div class="wp-block-outermost-icon-block">
-  <div class="icon-container"><svg></svg></div>
-</div>
-<!-- /wp:outermost/icon-block -->
-```
-
-Safer:
-
-- Use a known-good editor-saved named icon block with its full SVG path, or
-- Use the trusted `plus-cta-linked-group-icon` snippet for plus CTAs, or an exact current-site editor-copied button/link snippet.
+Named Outermost/Ollie icons must include the saved SVG path. Do not output an empty SVG shell.
 
 ### Custom SVG rule
 
-For generated custom SVG artwork with no editor-safe icon snippet available, this diagnostic fallback is acceptable:
+For AI-generated decorative SVGs with no editor-safe snippet available, use `core/html`:
 
 ```html
 <!-- wp:html -->
@@ -458,45 +431,23 @@ For generated custom SVG artwork with no editor-safe icon snippet available, thi
 <!-- /wp:html -->
 ```
 
-Use `outermost/icon-block` for custom SVGs only when copying exact editor-saved custom icon markup, for example `iconName:""` with the full `.wp-block-outermost-icon-block` and `.icon-container` structure from the editor.
-
-### Validation rule for icons
-
-If a generated pattern contains `outermost/icon-block`, treat it as editor-sensitive.
-
-`php -l` and `parse_blocks()` validation are not enough to prove editor serialization safety for third-party icon blocks or manually generated styled button blocks. Prefer known-good copied markup and native block composition. Use `core/html` only as a temporary diagnostic fallback or for decorative SVGs when no block-native/editor-safe option exists.
-
 ## Image and Cover Safety Rules
-
-For standalone screenshot-based card patterns, do not use dynamic or fake media as final saved markup.
 
 Hard errors for generated final patterns:
 
-- Do not use `core/cover` with `useFeaturedImage:true` unless the user explicitly asks for Query Loop, post template, or post-context output.
-- Do not write `id:0`.
-- Do not write `wp-image-0`.
-- Do not use remote placeholder image services such as `picsum.photos`, `placehold.co`, `placeholder.com`, `loremflickr.com`, or `dummyimage.com`.
-- Do not use generated block-level `style.css` such as `"css":"overflow:hidden;"` for clipping. Use normal block supports or known-good editor-copied markup.
+- Do not use `core/cover` with `useFeaturedImage:true` in standalone context.
+- Do not write `id:0` or `wp-image-0`.
+- Do not use remote placeholder image services.
+- Do not use generated block-level `style.css` for clipping.
 
-If a screenshot-matched design requires a real image and no real project media URL/ID is known, stop before writing and ask the user for the media asset. A proposal may include a clearly marked placeholder, but the final written pattern must not include fake remote image URLs, `id:0`, or `wp-image-0`.
-
-For static screenshot cards:
-
-- Use `core/image` when the image is simply displayed.
-- Use static `core/cover` only when overlay content is needed and the URL/ID are real or copied from known-good editor markup.
-- If rounded clipping is required, prefer known-good editor-saved cover/image markup. Do not invent serializer-sensitive attributes.
+If a screenshot-matched design requires a real image and no real project media URL/ID is known, stop and ask the user for the asset.
 
 ## Screenshot Reference Workflow
-
-When the user asks for visual examples, block inspiration, or matching an existing section:
 
 1. Check `~/pictures/blocks/`.
 2. Prefer filenames and nearby folder names as hints.
 3. Ask for clarification only when multiple screenshots plausibly match.
-4. Do not OCR screenshots unless necessary.
-5. Use screenshots as visual references only; still generate semantic WordPress block markup.
-
-Suggested shell check:
+4. Use screenshots as visual references only; generate semantic WordPress block markup.
 
 ```sh
 find "$HOME/pictures/blocks" -maxdepth 2 -type f \
@@ -506,9 +457,14 @@ find "$HOME/pictures/blocks" -maxdepth 2 -type f \
 
 ## Code Boilerplate and Patterns
 
-Use these structural templates to reduce drift and ensure Ollie Pro compatibility.
-
 ### PHP Pattern Skeleton
+
+The `content` string uses PHP string concatenation for all translatable text and asset URLs. The file is `require`d by the plugin so PHP runs at registration time.
+
+- `esc_html__()` — returns escaped translated string for text node concatenation.
+- `esc_attr__()` — returns escaped translated string for attribute concatenation.
+- `esc_url()` — returns escaped URL for `src`/`href` concatenation.
+- Single quotes inside `content` must be escaped as `\'`.
 
 ```php
 <?php
@@ -517,13 +473,13 @@ return array(
 	'categories'    => array( 'dhali-web-development', 'card' ),
 	'description'   => _x( 'One sentence describing the pattern.', 'Block pattern description', 'dhali' ),
 	'keywords'      => array( 'keyword', 'section' ),
-	'viewportWidth' => 1000,
+	'viewportWidth' => 1500,
 	'blockTypes'    => array( 'core/group' ),
 	'content'       => '
-<!-- wp:group {"align":"full","style":{"spacing":{"padding":{"top":"var:preset|spacing|xx-large","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|xx-large","left":"var:preset|spacing|medium"}}},"backgroundColor":"base","layout":{"type":"constrained"}} -->
-<div class="wp-block-group alignfull has-base-background-color has-background" style="padding-top:var(--wp--preset--spacing--xx-large);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--xx-large);padding-left:var(--wp--preset--spacing--medium)">
+<!-- wp:group {"align":"full","style":{"spacing":{"padding":{"top":"var:preset|spacing|xx-large","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|xx-large","left":"var:preset|spacing|medium"},"margin":{"top":"0","bottom":"0"}}},"backgroundColor":"base","layout":{"type":"constrained"}} -->
+<div class="wp-block-group alignfull has-base-background-color has-background" style="margin-top:0;margin-bottom:0;padding-top:var(--wp--preset--spacing--xx-large);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--xx-large);padding-left:var(--wp--preset--spacing--medium)">
 	<!-- wp:heading {"textAlign":"center","fontSize":"x-large"} -->
-	<h2 class="wp-block-heading has-text-align-center has-x-large-font-size">Pattern Heading</h2>
+	<h2 class="wp-block-heading has-text-align-center has-x-large-font-size">' . esc_html__( 'Pattern Heading', 'dhali' ) . '</h2>
 	<!-- /wp:heading -->
 </div>
 <!-- /wp:group -->
@@ -531,51 +487,26 @@ return array(
 );
 ```
 
-### Ollie Icon Block: Named Phosphor Icon
+### Image reference in content string
 
-Use only when copied from known-good editor-saved markup. The saved SVG path must be present. `iconColorValue` should be the resolved editor value, usually a hex value, not a CSS variable.
-
-```html
-<div class="wp-block-outermost-icon-block">
-  <div
-    class="icon-container has-icon-color has-primary-color"
-    style="color:#5344F4;width:1.75rem;transform:rotate(0deg) scaleX(1) scaleY(1)"
-  >
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 256 256"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    ></svg>
-  </div>
-</div>
+```php
+'<figure class="wp-block-image size-full"><img src="' . esc_url( get_template_directory_uri() ) . '/patterns/images/desktop.webp" alt="' . esc_attr__( 'Description', 'dhali' ) . '"/></figure>'
 ```
 
-### Ollie Icon Block: Custom SVG with Background Pill
-
-Use only when copying exact editor-saved custom SVG icon markup. For AI-generated SVGs, prefer `core/html` instead. Set `iconName` to an empty string when required by the block's saved markup.
+### Card shell with shadow
 
 ```html
-<div class="wp-block-outermost-icon-block">
-  <div
-    class="icon-container has-icon-background-color has-tertiary-background-color"
-    style="background-color:#f8f7fc;width:90px;padding-top:20px;padding-right:5px;padding-bottom:20px;padding-left:5px;border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);transform:rotate(0deg) scaleX(1) scaleY(1)"
-  >
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="#1E1E26"
-      aria-hidden="true"
-      focusable="false"
-    ></svg>
-  </div>
-</div>
+<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} -->
+<div
+  class="wp-block-group has-base-background-color has-background"
+  style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)"
+></div>
+<!-- /wp:group -->
 ```
 
-### Card with full-width Cover image
+### Card with Cover image and badge (visual containment)
 
-Use this only as an editor-safe/trusted Cover shape. Replace `IMAGE_URL` and `IMAGE_ID`, but preserve the Cover wrapper classes, image class, background span, and inner container.
+Use this shape when a badge or label must appear inside the image area. The badge lives inside `wp-block-cover__inner-container`. Replace `IMAGE_URL` and `IMAGE_ID` with real values. Use trusted or editor-copied Cover markup — do not generate the Cover shape from memory.
 
 ```html
 <!-- wp:cover {"url":"IMAGE_URL","id":IMAGE_ID,"dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->
@@ -594,60 +525,38 @@ Use this only as an editor-safe/trusted Cover shape. Replace `IMAGE_URL` and `IM
     data-object-fit="cover"
   />
   <div class="wp-block-cover__inner-container">
-    <!-- inner content here -->
+    <!-- badge or label block goes here, inside the image -->
   </div>
 </div>
 <!-- /wp:cover -->
 ```
 
-### Card shell with shadow
-
-```html
-<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} -->
-<div
-  class="wp-block-group has-base-background-color has-background"
-  style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)"
-></div>
-<!-- /wp:group -->
-```
-
 ### Stable plus CTA pattern
 
-For a circular plus CTA inside generated patterns, fetch `dhali/get-editor-safe-block-snippets` and copy `plus-cta-linked-group-icon` exactly. This keeps the CTA block-native and editor-editable while avoiding the serializer mismatch observed with manually generated styled `core/button` plus markup.
+For a circular plus CTA, fetch `dhali/get-editor-safe-block-snippets` and copy `plus-cta-circle-button` exactly. This is a serializer-safe `core/buttons` + `core/button` composition.
 
-Use `core/button` for plus CTAs only when the exact saved button block was copied from the current WordPress editor or returned by a trusted editor/Ollie snippet. Use `core/html` only as a temporary diagnostic fallback.
+Do not use the deprecated `plus-cta-linked-group-icon` snippet. Do not manually generate styled `core/button` plus markup from memory.
 
 ```html
-<!-- wp:group {"style":{"color":{"background":"#fff29e"},"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}},"spacing":{"padding":{"top":"0.5rem","bottom":"0.5rem","left":"0.5rem","right":"0.5rem"}}},"layout":{"type":"constrained"},"href":"#","linkDestination":"custom","animationType":"scaleOnHover"} -->
-<div
-  class="wp-block-group has-background"
-  style="border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);background-color:#fff29e;padding-top:0.5rem;padding-right:0.5rem;padding-bottom:0.5rem;padding-left:0.5rem"
->
-  <!-- wp:outermost/icon-block {"iconName":"wordpress-plus","customIconBackgroundColor":"#fff29e","width":"30px"} -->
-  <div class="wp-block-outermost-icon-block">
-    <div
-      class="icon-container"
-      style="width:30px;transform:rotate(0deg) scaleX(1) scaleY(1)"
+<!-- wp:buttons {"metadata":{"name":"CTA"},"layout":{"type":"flex","justifyContent":"left"}} -->
+<div class="wp-block-buttons">
+  <!-- wp:button {"style":{"color":{"text":"#1E1E26","background":"#fff29e"},"border":{"radius":"999px"},"spacing":{"padding":{"top":"0.55rem","right":"0.8rem","bottom":"0.55rem","left":"0.8rem"}}}} -->
+  <div class="wp-block-button">
+    <a
+      class="wp-block-button__link has-text-color has-background wp-element-button"
+      href="#"
+      style="border-radius:999px;color:#1E1E26;background-color:#fff29e;padding-top:0.55rem;padding-right:0.8rem;padding-bottom:0.55rem;padding-left:0.8rem"
+      >+</a
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          d="M11 12.5V17.5H12.5V12.5H17.5V11H12.5V6H11V11H6V12.5H11Z"
-        ></path>
-      </svg>
-    </div>
   </div>
-  <!-- /wp:outermost/icon-block -->
+  <!-- /wp:button -->
 </div>
-<!-- /wp:group -->
+<!-- /wp:buttons -->
 ```
 
 ### Custom SVG via core/html
 
-For AI-generated decorative SVGs, prefer this stable pattern:
+For AI-generated decorative SVGs:
 
 ```html
 <!-- wp:html -->
@@ -661,27 +570,25 @@ For AI-generated decorative SVGs, prefer this stable pattern:
 
 ## WordPress Integration Rules
 
-- **Pattern Overrides:** If creating synced patterns with editable text/images, mark editable child blocks with `"metadata":{"bindings":...}` or `"role":"content"` only where appropriate for the project's supported WordPress version.
-- **Block Bindings:** Prefer binding data to core blocks instead of creating custom blocks. Verify registered sources when needed.
-- **Interactivity API:** Use the current Interactivity API store/directive pattern supported by the project. Avoid legacy assumptions unless live project code confirms them.
-- **Iframed Editor:** Assume the editor is iframed for Block API v3+ blocks. Do not rely on parent `wp-admin` DOM selectors.
-- **Live Context via MCP:** Use MCP abilities first for snapshot, token map, pattern skeleton, editor-safe snippets, icon manifest, and markup validation. Use `@wp_cli` only for facts not exposed by MCP.
+- **Pattern Overrides:** Mark editable child blocks with `"metadata":{"bindings":...}` or `"role":"content"` only where appropriate.
+- **Block Bindings:** Prefer binding data to core blocks instead of creating custom blocks.
+- **Interactivity API:** Use the current store/directive pattern supported by the project.
+- **Iframed Editor:** Assume the editor is iframed for Block API v3+ blocks.
+- **Live Context via MCP:** Use MCP abilities first. Use `@wp_cli` only for facts not exposed by MCP.
 
 ## Authoring Protocol
 
-For every pattern or template request, output this exact four-part proposal before writing files.
+For every pattern or template request, output this four-part proposal before writing. Keep the proposal concise — summarize intent and structure; do not enumerate every attribute. The payload is the complete source of truth.
 
 ### 1. Architectural Intent
 
-Briefly explain the visual structure, Ollie tokens chosen, and native WordPress/FSE decisions.
+Briefly explain the visual structure, Ollie tokens chosen, and native WordPress/FSE decisions. One short paragraph.
 
 ### 2. Block Tree
 
-Provide an indented list of block names and key attributes.
+An indented list of block names and key structural attributes. Not every attribute — focus on hierarchy and layout decisions.
 
 ### 3. Proposed Destination
-
-State the exact path, for example:
 
 ```text
 wp-content/plugins/dhali-pattern-library/patterns/{pattern-name}.php
@@ -689,32 +596,30 @@ wp-content/plugins/dhali-pattern-library/patterns/{pattern-name}.php
 
 ### 4. PHP/HTML Payload
 
-Provide the complete PHP return array or HTML template content.
+The complete PHP return array or HTML template content.
 
 Rules:
 
-- Include `dhali-web-development` and one semantic core category for PHP patterns.
-- Keep PHP pattern content inside one single-quoted string.
-- Escape single quotes inside content as needed.
+- Include `dhali-web-development` and one semantic core category.
+- `viewportWidth` must be `1500`.
+- Use `esc_html__()`, `esc_attr__()`, and `esc_url()` concatenation for all user-visible text and asset references inside the `content` string.
 - Use tabs for PHP array indentation.
 - Do not write the file until the user explicitly says `Approved`.
 
 ## Post-Approval Write and Validation Workflow
 
-Use fast validation by default. Do not run expensive editor-context validation unless a deep-validation trigger is present.
+Use fast validation by default.
 
 1. Reconfirm MCP discovery and one cheap execute sanity call before writing.
-2. Confirm required fast-validation abilities are available:
-   - `dhali/lint-pattern-authoring-rules`
-   - `dhali/validate-pattern-markup`
+2. Confirm `dhali/lint-pattern-authoring-rules` and `dhali/validate-pattern-markup` are available.
 3. Write the approved file.
-4. Run `php -l` for PHP pattern files.
+4. Run `php -l`. Stop and fix PHP syntax errors before continuing.
 5. Run `dhali/lint-pattern-authoring-rules`. Stop and fix errors before continuing.
 6. Run `dhali/validate-pattern-markup`. Stop and fix errors before continuing.
-7. Decide whether deep validation is required. Run `dhali/test-pattern-in-editor-context` only for serializer-sensitive blocks, warnings/errors, explicit user requests, or new untrusted snippets.
-8. Report concise results. Include whether editor-context validation was run or skipped and why.
+7. Decide whether deep validation is required. If the pattern uses `core/query` or `core/post-template`, deep validation is mandatory. For other serializer-sensitive blocks, warnings/errors, or explicit user requests, run `dhali/test-pattern-in-editor-context`.
+8. Report concise results including whether editor-context validation was run or skipped and why.
 
-Do not run MCP validation calls in parallel by default. Sequential checks are preferred for speed, cleaner failure isolation, and fewer MCP disconnects.
+Do not run MCP validation calls in parallel. Sequential checks produce cleaner failure isolation and fewer MCP disconnects.
 
 ## Quality Checklist
 
@@ -724,9 +629,15 @@ Before final output, verify:
 - YAML frontmatter exists only once.
 - Every opened Markdown code fence is closed.
 - SVG `xmlns` attributes are plain URLs, not Markdown links.
-- No generated-file logs remain in the file.
+- No generated-file logs remain.
 - No invented Ollie token slugs.
-- No broad pattern-library scan when `context.md` has enough information.
+- No invented image filenames — only filenames confirmed by `dhali/get-local-assets`.
+- No bare text strings inside the `content` value — all user-visible text uses `esc_html__()`, `esc_attr__()`, or `esc_url()` concatenation.
+- `viewportWidth` is `1500`.
 - Any file-write action waits for explicit approval.
-- MCP validation availability and execute sanity are confirmed before writing approved PHP patterns.
-- Generated final patterns do not contain `id:0`, `wp-image-0`, remote placeholder image URLs, dynamic featured images in standalone context, invalid `has-custom-font-size` with preset `fontSize`, or generated `style.css` serializer hacks.
+- Static pattern was authored before any Query Loop conversion.
+- Query Loop was only used when the user explicitly requested it.
+- Elements visually inside a source region are inside that region in the block structure.
+- `core/query` / `core/post-template` patterns ran editor-context validation.
+- Generated final patterns do not contain `id:0`, `wp-image-0`, remote placeholder URLs, `useFeaturedImage:true` in standalone context, or generated `style.css` serializer hacks.
+- Plus CTAs use `plus-cta-circle-button` from `dhali/get-editor-safe-block-snippets`, not the deprecated `plus-cta-linked-group-icon`.
