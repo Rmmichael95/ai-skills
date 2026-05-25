@@ -421,7 +421,55 @@ function dhali_mcp_build_context_markdown() {
 	$content .= "## Custom Tokens\n\n";
 	$content .= "```json\n";
 	$content .= wp_json_encode( $tokens['custom'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-	$content .= "\n```\n";
+	$content .= "\n```\n\n";
+
+	// Inject plugin asset list from dhali-pattern-library's own assets/ directory.
+	// These are the only images and icons patterns should reference.
+	// Do NOT reference Ollie theme assets (get_template_directory_uri).
+	$plugin_dir = plugin_dir_path( __FILE__ );
+	$images_dir = $plugin_dir . 'assets/images/';
+	$icons_dir  = $plugin_dir . 'assets/icons/';
+	$images     = array();
+	$icons      = array();
+
+	if ( is_dir( $images_dir ) ) {
+		foreach ( array_diff( scandir( $images_dir ), array( '.', '..' ) ) as $file ) {
+			if ( preg_match( '/\.(webp|jpg|jpeg|png|svg|gif)$/i', $file ) ) {
+				$images[] = $file;
+			}
+		}
+		sort( $images );
+	}
+
+	if ( is_dir( $icons_dir ) ) {
+		foreach ( array_diff( scandir( $icons_dir ), array( '.', '..' ) ) as $file ) {
+			if ( preg_match( '/\.(svg|png)$/i', $file ) ) {
+				$icons[] = $file;
+			}
+		}
+		sort( $icons );
+	}
+
+	$content .= "## Plugin Placeholder Assets\n\n";
+	$content .= "All pattern images and icons must come from the dhali-pattern-library plugin's own assets/. ";
+	$content .= "Use plugin_dir_url( dirname( __FILE__ ) ) — do NOT use dhali_pattern_library_image_url() (helper not registered by default). ";
+	$content .= "Never reference Ollie theme assets (get_template_directory_uri).\n\n";
+
+	if ( ! empty( $images ) ) {
+		$content .= "**Images** — `' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '`\n";
+		foreach ( $images as $image ) {
+			$content .= '- `' . $image . "`\n";
+		}
+		$content .= "\n";
+	}
+
+	if ( ! empty( $icons ) ) {
+		$content .= "**Icons** — `' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/icons/FILENAME' ) . '`\n";
+		foreach ( $icons as $icon ) {
+			$content .= '- `' . $icon . "`\n";
+		}
+		$content .= "\n";
+	}
 
 	return $content;
 }
@@ -704,7 +752,23 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		$issues[] = dhali_mcp_pattern_issue(
 			'error',
 			'no_remote_placeholder_images',
-			'Do not write final generated patterns with remote placeholder image URLs. Ask for a real media URL/ID before writing the final file.'
+			'Do not write final generated patterns with remote placeholder image URLs. Use plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/FILENAME\' with a filename from the plugin assets/images/ directory.'
+		);
+	}
+
+	if ( preg_match( '/get_template_directory_uri\s*\(\s*\)/', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'no_theme_asset_references',
+			'Pattern references get_template_directory_uri() which resolves to the Ollie theme, not the plugin. Use plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/FILENAME\' instead.'
+		);
+	}
+
+	if ( preg_match( '/dhali_pattern_library_image_url\s*\(|dhali_pattern_library_icon_url\s*\(|dhali_pattern_library_asset_url\s*\(/', $markup ) ) {
+		$issues[] = dhali_mcp_pattern_issue(
+			'error',
+			'undefined_helper_function',
+			'Pattern calls dhali_pattern_library_image_url() or a related helper that is not registered in the plugin by default. Use plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/FILENAME\' to avoid a fatal PHP error at pattern registration time.'
 		);
 	}
 
@@ -845,16 +909,16 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 				$issues[] = dhali_mcp_pattern_issue(
 					'error',
 					'outermost_icon_untrusted_name',
-					$label . ' uses an untrusted iconName. Use known-good editor-saved icon slugs with full SVG paths. For plus CTAs, use plus-cta-linked-group-icon or an exact editor-copied/Ollie button/link snippet.'
+					$label . ' uses an untrusted iconName. Use known-good editor-saved icon slugs with full SVG paths. For custom/decorative SVGs use iconName:"" with the full SVG embedded. For plus CTAs use plus-cta-linked-group-icon or an exact editor-copied/Ollie button/link snippet.'
 				);
 			}
 
 			if ( preg_match( '/"iconName"\s*:\s*""/', $icon_block ) &&
-				! preg_match( '/has-icon-background-color|ollieCustomClasses|className/', $icon_block ) ) {
+				preg_match( '/<svg\b[^>]*>\s*<\/svg>/s', $icon_block ) ) {
 				$issues[] = dhali_mcp_pattern_issue(
-					'warning',
-					'generated_custom_outermost_icon_risk',
-					$label . ' appears to be generated custom SVG icon markup. Use only if copied from known-good editor-saved markup or returned by a trusted snippet; otherwise use a block-native/editor-safe alternative.'
+					'error',
+					'outermost_icon_empty_svg_custom',
+					$label . ' uses iconName:"" (custom SVG) but the SVG element is empty. Provide real path/shape elements inside the <svg> tag.'
 				);
 			}
 		}
@@ -894,15 +958,15 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 function dhali_mcp_get_editor_safe_block_snippets_data() {
 	return array(
 		'guidelines' => array(
-			'Decorative SVGs should use editor-copied/trusted outermost/icon-block when available; use core/html only when no block-native/editor-safe icon snippet exists.',
+			'Decorative and AI-generated icon SVGs must use outermost/icon-block with iconName:"" and the full SVG embedded inside .icon-container. Do not use core/html for decorative icons.',
 			'Circular plus CTAs should use plus-cta-linked-group-icon: a native linked core/group wrapper with a known-good wordpress-plus icon block and full SVG path. Do not default to core/html. Do not manually generate custom styled core/button plus buttons.',
-			'Use outermost/icon-block only with known-good editor-saved markup or trusted snippets with full SVG paths.',
+			'Use outermost/icon-block with a named iconName only for known-good editor-saved icon slugs with full SVG paths.',
 			'Use native Ollie/editor button markup for CTAs. core/html is diagnostic fallback only, not a default CTA strategy.',
 			'Use core/image for ordinary images. Use core/cover only from editor-copied markup, user-provided markup, or trusted snippets. Do not generate final Cover markup from memory. Use useFeaturedImage:true only in Query Loop or post-template context.',
 			'Final generated patterns must not use id:0, wp-image-0, remote placeholder images, or generated overflow:hidden style.css.',
 			'If a screenshot-matched card needs a real image and no media URL/id is known, ask for the asset before writing the final pattern.',
 			'When fontSize is a preset slug (e.g. "base"), the <a> element must have has-{slug}-font-size only. Never add has-custom-font-size alongside a preset fontSize. For plus CTAs, prefer plus-cta-linked-group-icon or exact editor-copied/Ollie button markup.',
-			'CONFIRMED by editor testing: core/group with layout.type "flex" and style.spacing.blockGap must NOT have any gap-related property in the saved HTML inline style. WordPress applies blockGap via generated CSS. Use the flex-group-vertical or flex-group-horizontal snippet — never generate flex group HTML from scratch.',
+			'CONFIRMED by editor testing: core/group with layout.type "flex" must include className with the layout classes (is-layout-flex, is-vertical/is-horizontal, wp-block-group-is-layout-flex) in BOTH the block attributes and the rendered div. blockGap must NOT appear in the inline style attribute.',
 		),
 		'snippets'   => array(
 
@@ -925,7 +989,10 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 			// IMAGE_ID, and label text only; preserve wrapper classes and inner-container shape.
 			'article-cover-card-with-pill' => '<!-- wp:cover {"url":"IMAGE_URL","id":IMAGE_ID,"dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} --><div class="wp-block-cover has-custom-content-position is-position-top-left is-light"><span aria-hidden="true" class="wp-block-cover__background has-background-dim-0 has-background-dim" style="background-color:#c8cecf"></span><img class="wp-block-cover__image-background wp-image-IMAGE_ID size-full" alt="" src="IMAGE_URL" data-object-fit="cover"/><div class="wp-block-cover__inner-container"><!-- wp:group {"style":{"spacing":{"margin":{"top":"1.25rem","left":"1.25rem"},"padding":{"top":"0.25rem","right":"0.75rem","bottom":"0.25rem","left":"0.75rem"}},"border":{"radius":"var:preset|border-radius|full"}},"backgroundColor":"primary-accent","layout":{"type":"constrained"}} --><div class="wp-block-group has-primary-accent-background-color has-background" style="margin-top:1.25rem;margin-left:1.25rem;border-radius:var(--wp--preset--border-radius--full);padding-top:0.25rem;padding-right:0.75rem;padding-bottom:0.25rem;padding-left:0.75rem"><!-- wp:paragraph {"style":{"typography":{"fontWeight":"500"}},"textColor":"main","fontSize":"x-small"} --><p class="has-main-color has-text-color has-x-small-font-size" style="font-weight:500">Harvest</p><!-- /wp:paragraph --></div><!-- /wp:group --></div></div><!-- /wp:cover -->',
 
-			'custom-svg-via-core-html' => '<!-- wp:html --><div style="width:56px;line-height:0" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="M32 8 a24 24 0 1 1 0 48 a24 24 0 0 1 0-48 z"></path></svg></div><!-- /wp:html -->',
+			// CORRECT pattern for all decorative/AI-generated icon SVGs.
+			// Use outermost/icon-block with iconName:"" and the full SVG embedded.
+			// Do not use core/html for decorative icons.
+			'custom-svg-via-icon-block' => '<!-- wp:outermost/icon-block {"iconName":"","width":"64px"} --><div class="wp-block-outermost-icon-block"><div class="icon-container" style="width:64px;transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="REPLACE_WITH_REAL_PATH_DATA"/></svg></div></div><!-- /wp:outermost/icon-block -->',
 
 			// CONFIRMED by editor testing (2026-05):
 			// - Layout classes ARE required: is-layout-flex, is-vertical, wp-block-group-is-layout-flex
@@ -933,8 +1000,8 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 			// - Other style properties (padding, border-radius, shadow) DO go in the inline style normally
 			// - gap: or --wp--style--block-gap: in the style attribute causes "invalid content" error
 			'flex-group-vertical' =>
-				'<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"},"blockGap":"var:preset|spacing|small"},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"flex","orientation":"vertical","flexWrap":"nowrap"}} -->' .
-				'<div class="wp-block-group has-base-background-color has-background is-layout-flex is-vertical wp-block-group-is-layout-flex" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)">' .
+				'<!-- wp:group {"className":"is-layout-flex is-vertical wp-block-group-is-layout-flex","style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"},"blockGap":"var:preset|spacing|small"},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"flex","orientation":"vertical","flexWrap":"nowrap"}} -->' .
+				'<div class="wp-block-group is-layout-flex is-vertical wp-block-group-is-layout-flex has-base-background-color has-background" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)">' .
 				'</div>' .
 				'<!-- /wp:group -->',
 
@@ -1248,7 +1315,7 @@ PHP;
 							'<!-- /wp:outermost/icon-block -->',
 
 						// Custom SVG with background pill — iconName:"" with real SVG path.
-						// For AI-generated SVGs, prefer core/html instead (see custom-svg-via-core-html in editor-safe snippets).
+						// For custom/decorative SVGs, use outermost/icon-block with iconName:"" and the full SVG embedded (see get-editor-safe-block-snippets: custom-svg-via-icon-block).
 						// Only use this template when copying exact editor-saved custom icon markup.
 						'outermost-custom-svg-pill' =>
 							'<!-- wp:outermost/icon-block {"iconName":"","iconBackgroundColor":"tertiary","iconBackgroundColorValue":"#f8f7fc","width":"90px","style":{"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}},"spacing":{"padding":{"top":"20px","right":"5px","bottom":"20px","left":"5px"}}}} -->' .
@@ -1262,7 +1329,7 @@ PHP;
 						'usage-note' =>
 							'Use outermost-named-icon only for known-good Phosphor icon slugs from editor-saved markup. ' .
 							'Use outermost-custom-svg-pill only when copying exact editor-saved custom icon markup — replace the SVG path with the real path before writing. ' .
-							'For AI-generated decorative SVGs, prefer editor-copied/trusted icon snippets when available; use core/html only as fallback (see get-editor-safe-block-snippets: custom-svg-via-core-html).',
+							'For all decorative or AI-generated icon SVGs, use outermost/icon-block with iconName:"" and the full SVG embedded (see get-editor-safe-block-snippets: custom-svg-via-icon-block). Do not use core/html for icons.',
 					),
 				);
 			},
@@ -1507,58 +1574,69 @@ PHP;
 		),
 
 		// ── dhali/get-local-assets ───────────────────────────────────────────
-		// Returns available local placeholder image filenames from the active
-		// Ollie theme's patterns/images/ directory. The agent uses these to
-		// construct image src attributes via PHP string concatenation rather
-		// than inventing or using remote URLs.
+		// Returns available placeholder asset filenames from the dhali-pattern-library
+		// plugin's own assets/ directory. Patterns must reference these via
+		// plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME'.
+		// Do NOT use dhali_pattern_library_image_url() — the helper functions are
+		// not registered in the plugin by default and will cause a fatal PHP error.
 		'dhali/get-local-assets' => array(
 			'label'               => __( 'Get local assets', 'dhali' ),
-			'description'         => __( "Returns available local placeholder image filenames from the Ollie theme's patterns/images/ directory. Use filenames with PHP concatenation: esc_url( get_template_directory_uri() ) . '/patterns/images/FILENAME'.", 'dhali' ),
+			'description'         => __( 'Returns placeholder asset filenames from the dhali-pattern-library plugin\'s own assets/images/ and assets/icons/ directories. Use plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/FILENAME\' in pattern content strings.', 'dhali' ),
 			'category'            => 'site',
 			'input_schema'        => dhali_mcp_request_input_schema( 'get_local_assets', 'Use "get_local_assets".' ),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
-					'status'      => dhali_mcp_string_schema( 'success or error.' ),
-					'images'      => dhali_mcp_string_array_schema( 'Available image filenames (e.g. desktop.webp, avatar-1.webp).' ),
-					'php_pattern' => dhali_mcp_string_schema( 'PHP concatenation pattern to use for image src attributes.' ),
-					'message'     => dhali_mcp_string_schema( 'Human-readable message.' ),
+					'status'            => dhali_mcp_string_schema( 'success or error.' ),
+					'images'            => dhali_mcp_string_array_schema( 'Available image filenames from assets/images/.' ),
+					'icons'             => dhali_mcp_string_array_schema( 'Available icon filenames from assets/icons/.' ),
+					'image_php_pattern' => dhali_mcp_string_schema( 'PHP pattern for image src using the helper function.' ),
+					'icon_php_pattern'  => dhali_mcp_string_schema( 'PHP pattern for icon src using the helper function.' ),
+					'fallback_pattern'  => dhali_mcp_string_schema( 'PHP fallback using plugin_dir_url( dirname( __FILE__ ) ) for pattern files.' ),
+					'message'           => dhali_mcp_string_schema( 'Human-readable message.' ),
 				),
-				'required'   => array( 'status', 'images', 'php_pattern', 'message' ),
+				'required'   => array( 'status', 'images', 'icons', 'image_php_pattern', 'icon_php_pattern', 'fallback_pattern', 'message' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
-				$dir = get_template_directory() . '/patterns/images/';
+				$plugin_dir = plugin_dir_path( __FILE__ );
+				$images_dir = $plugin_dir . 'assets/images/';
+				$icons_dir  = $plugin_dir . 'assets/icons/';
+				$images     = array();
+				$icons      = array();
 
-				if ( ! is_dir( $dir ) ) {
-					return new WP_Error(
-						'images_dir_not_found',
-						sprintf( 'No patterns/images/ directory found in theme at %s.', $dir )
-					);
-				}
-
-				$files  = array_diff( scandir( $dir ), array( '.', '..' ) );
-				$images = array();
-
-				foreach ( $files as $file ) {
-					if ( preg_match( '/\.(webp|jpg|jpeg|png|svg|gif)$/i', $file ) ) {
-						$images[] = $file;
+				if ( is_dir( $images_dir ) ) {
+					foreach ( array_diff( scandir( $images_dir ), array( '.', '..' ) ) as $file ) {
+						if ( preg_match( '/\.(webp|jpg|jpeg|png|svg|gif)$/i', $file ) ) {
+							$images[] = $file;
+						}
 					}
+					sort( $images );
 				}
 
-				sort( $images );
+				if ( is_dir( $icons_dir ) ) {
+					foreach ( array_diff( scandir( $icons_dir ), array( '.', '..' ) ) as $file ) {
+						if ( preg_match( '/\.(svg|png)$/i', $file ) ) {
+							$icons[] = $file;
+						}
+					}
+					sort( $icons );
+				}
 
-				if ( empty( $images ) ) {
+				if ( empty( $images ) && empty( $icons ) ) {
 					return new WP_Error(
-						'no_images_found',
-						sprintf( 'No image files found in %s.', $dir )
+						'no_assets_found',
+						sprintf( 'No assets found in plugin at %s. Check the assets/images/ and assets/icons/ directories exist.', $plugin_dir )
 					);
 				}
 
 				return array(
-					'status'      => 'success',
-					'images'      => array_values( $images ),
-					'php_pattern' => "' . esc_url( get_template_directory_uri() ) . '/patterns/images/FILENAME'",
-					'message'     => count( $images ) . ' images available. Replace FILENAME with one of the listed filenames.',
+					'status'            => 'success',
+					'images'            => array_values( $images ),
+					'icons'             => array_values( $icons ),
+					'image_php_pattern' => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '",
+					'icon_php_pattern'  => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/icons/FILENAME' ) . '",
+					'fallback_pattern'  => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '",
+					'message'           => count( $images ) . ' images and ' . count( $icons ) . ' icons available in the dhali-pattern-library plugin assets. Replace FILENAME with a listed filename. Use plugin_dir_url( dirname( __FILE__ ) ) — do not use dhali_pattern_library_image_url() unless you have confirmed the helper functions are registered in the plugin.',
 				);
 			},
 			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },

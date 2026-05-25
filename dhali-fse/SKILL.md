@@ -13,6 +13,7 @@ You are an expert WordPress frontend architect. Your objective is to author prec
 - **Intent beats appearance:** Do not infer dynamic behavior from visual styling alone. A card that contains an image, category, date, title, and read-more link is a static visual source by default, not a dynamic post block.
 - **Preserve visual containment:** If an element visually appears inside another region — a badge inside an image, text over a cover, an icon inside a pill — that containment must be preserved in the block structure. Do not silently move overlaid or nested elements outside their source container.
 - **No emojis:** Never use emojis anywhere in generated code, comments, docs, or final pattern content.
+- **No remote placeholders:** Never use remote placeholder image URLs and never reference Ollie theme assets (`get_template_directory_uri()`). All images and icons in patterns must come from the `dhali-pattern-library` plugin's own `assets/` directory. The primary PHP pattern for all asset references inside pattern files is `plugin_dir_url( dirname( __FILE__ ) )`. Do not use `dhali_pattern_library_image_url()` or `dhali_pattern_library_icon_url()` unless you have confirmed those helper functions are defined in the plugin. Call `dhali/get-local-assets` to get the confirmed asset list and PHP pattern before writing any pattern that references images or icons.
 - **No guessing:** Use the existing context file first, then WordPress MCP abilities for small live facts, then `@wp_cli` only when MCP lacks the needed fact.
 - **No invented tokens:** Use the Ollie Pro token slugs listed in this skill. Do not invent CSS classes, preset slugs, color hexes, or spacing names.
 - **No unapproved writes:** For pattern/template work, propose the 4-part structure first. Do not write to the filesystem until the user explicitly approves.
@@ -147,6 +148,32 @@ For card-like patterns:
 - Native blocks first: Group, Columns, Cover, Image, Heading, Paragraph, Buttons, Query/Post blocks.
 - Style classes such as `is-style-fill`, `is-style-button-light`, `is-style-secondary-button`, `is-style-rounded-cover`, and `is-style-separator-thin` when copied from Ollie/editor output.
 - Minimal hardcoded CSS only when it appears in editor/Ollie saved markup.
+
+### Flex group className rule
+
+When a `core/group` uses `layout.type: "flex"`, the layout classes must appear in **both** the `className` block attribute and the rendered `<div>` class list:
+
+- Vertical: `"className":"is-layout-flex is-vertical wp-block-group-is-layout-flex"`
+- Horizontal: `"className":"is-layout-flex is-horizontal wp-block-group-is-layout-flex"`
+
+Omitting `className` from the block attributes causes a serializer mismatch.
+
+### Placeholder text rule (mandatory)
+
+**Do not copy any text from screenshots into pattern content.** Use generic placeholder text for all text nodes in the written file:
+
+- Headings: `This is a title`
+- Paragraphs: `This is an example of paragraph text`
+- Dates: `January 1, 2025`
+- Category labels: `Category`
+- CTA labels: `Learn more`
+- Short descriptions: `This is body text`
+
+The proposal may describe the _type_ of content in each slot ("section heading", "date line", "excerpt"), but the written PHP file must use placeholder text throughout. This is a hard rule — the pattern is a scaffold, not a content copy.
+
+### Icon SVG lookup rule
+
+Before generating a custom SVG for an icon, check what SVG files are available in the plugin's `assets/icons/` directory via `dhali/get-local-assets`. If a matching or close icon exists, read its file contents using `@wp_cli raw cat FILEPATH` and embed the SVG markup directly inside `outermost/icon-block` with `iconName:""`. Only generate a custom SVG when no available icon file is a reasonable match.
 
 ### Post card rule
 
@@ -338,7 +365,22 @@ Run on proposed or written block markup whenever the pattern includes image card
 
 ### `dhali/get-local-assets`
 
-Call before writing any pattern that references images. Returns available filenames from the Ollie theme's `patterns/images/` directory. Use only confirmed filenames. Do not invent image filenames or use remote URLs.
+Call before writing any pattern that references images or icons. Returns the confirmed asset list from the `dhali-pattern-library` plugin's own `assets/images/` and `assets/icons/` directories. Use only filenames from this list — do not invent filenames, do not reference Ollie theme assets, and do not use remote URLs.
+
+The known plugin assets from the manifest are:
+
+**Images** (`assets/images/`):
+
+- `placeholder-wide-16x9.webp` — wide landscape image placeholder
+- `placeholder-square-1x1.webp` — square image placeholder
+- `placeholder-portrait-3x4.webp` — portrait/card image placeholder
+- `avatar-placeholder.webp` — avatar/headshot placeholder
+- `logoipsum-1.svg` — logo placeholder variant 1
+- `logoipsum-2.svg` — logo placeholder variant 2
+
+**Icons** (`assets/icons/`):
+
+- `question.svg`, `plus.svg`, `check.svg`, `arrow-right.svg`, `image.svg`, `user.svg`
 
 ### `dhali/get-editor-safe-block-snippets`
 
@@ -487,11 +529,21 @@ return array(
 );
 ```
 
-### Image reference in content string
+### Plugin asset references in content strings
+
+All images and icons in pattern `content` strings must reference the `dhali-pattern-library` plugin's own `assets/` directory. The confirmed working pattern from inside a file in the `patterns/` subdirectory is:
 
 ```php
-'<figure class="wp-block-image size-full"><img src="' . esc_url( get_template_directory_uri() ) . '/patterns/images/desktop.webp" alt="' . esc_attr__( 'Description', 'dhali' ) . '"/></figure>'
+// Image — primary pattern (works without any helper functions)
+' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/placeholder-wide-16x9.webp' ) . '
+
+// Icon SVG used as img src
+' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/icons/check.svg' ) . '
 ```
+
+`dhali/get-local-assets` returns this exact pattern in its `fallback_pattern` field. Always use what the ability returns — do not substitute helper function calls unless you have verified that `dhali_pattern_library_image_url()` is defined in the running plugin. The helpers are not yet registered in the plugin by default; using them will cause a fatal PHP error.
+
+Never use `get_template_directory_uri()` — that resolves to the Ollie theme, not the plugin.
 
 ### Card shell with shadow
 
@@ -604,6 +656,8 @@ Rules:
 - `viewportWidth` must be `1500`.
 - Use `esc_html__()`, `esc_attr__()`, and `esc_url()` concatenation for all user-visible text and asset references inside the `content` string.
 - Use tabs for PHP array indentation.
+- **All text content must be placeholder text** — headings: `This is a title`; paragraphs: `This is an example of paragraph text`; dates: `January 1, 2025`; categories: `Category`. Do not copy any text from screenshots.
+- **All image and icon references must use** `plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME'` or `plugin_dir_url( dirname( __FILE__ ) ) . 'assets/icons/FILENAME'`. Do not use helper function calls.
 - Do not write the file until the user explicitly says `Approved`.
 
 ## Post-Approval Write and Validation Workflow
@@ -633,6 +687,10 @@ Before final output, verify:
 - No invented Ollie token slugs.
 - No invented image filenames — only filenames confirmed by `dhali/get-local-assets`.
 - No bare text strings inside the `content` value — all user-visible text uses `esc_html__()`, `esc_attr__()`, or `esc_url()` concatenation.
+- **No screenshot content in text nodes** — all headings, paragraphs, dates, and labels use placeholder text ("This is a title", "This is an example of paragraph text", "January 1, 2025", "Category"). This is a hard failure if violated.
+- **No helper function calls** (`dhali_pattern_library_image_url()`, `dhali_pattern_library_icon_url()`) — use `plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME'` instead.
+- No `get_template_directory_uri()` in asset references.
+- Flex groups have layout classes in both `className` attribute and the rendered `<div>`.
 - `viewportWidth` is `1500`.
 - Any file-write action waits for explicit approval.
 - Static pattern was authored before any Query Loop conversion.
@@ -640,4 +698,3 @@ Before final output, verify:
 - Elements visually inside a source region are inside that region in the block structure.
 - `core/query` / `core/post-template` patterns ran editor-context validation.
 - Generated final patterns do not contain `id:0`, `wp-image-0`, remote placeholder URLs, `useFeaturedImage:true` in standalone context, or generated `style.css` serializer hacks.
-- Plus CTAs use `plus-cta-circle-button` from `dhali/get-editor-safe-block-snippets`, not the deprecated `plus-cta-linked-group-icon`.
