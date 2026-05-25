@@ -772,20 +772,48 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		);
 	}
 
-	// FIX: Promoted from warning to error — a standalone pattern with a URL but no
-	// attachment ID produces a broken image and eventual wp-image-0 class in the editor.
+	// Block core/cover or core/image in standalone context only when using a fake or
+	// remote image, not when using a plugin-owned asset URL. Plugin assets legitimately
+	// have no WordPress attachment ID and do not produce wp-image-0 class issues because
+	// there is no id attribute in the serialized block at all. Only block id:0 and
+	// remote placeholder services, which are always wrong in final patterns.
 	if ( 'standalone' === $context &&
 		preg_match_all( '/<!--\s*wp:(cover|image)\s+(\{.*?\})\s*-->/s', $markup, $media_blocks, PREG_SET_ORDER ) ) {
 		foreach ( $media_blocks as $media_block ) {
 			$block_name = isset( $media_block[1] ) ? $media_block[1] : 'media';
 			$attrs_raw  = isset( $media_block[2] ) ? $media_block[2] : '';
 
-			if ( false !== strpos( $attrs_raw, '"url"' ) && ! preg_match( '/"id"\s*:\s*[1-9][0-9]*/', $attrs_raw ) ) {
+			// Hard error: explicit id:0 is always wrong.
+			if ( preg_match( '/"id"\s*:\s*0\b/', $attrs_raw ) ) {
 				$issues[] = dhali_mcp_pattern_issue(
 					'error',
-					'standalone_media_without_attachment_id',
+					'fake_attachment_id_zero',
+					sprintf( 'Standalone core/%s has id:0. Remove the id attribute entirely when using a plugin asset URL, or provide a real attachment ID.', $block_name )
+				);
+				continue;
+			}
+
+			// Hard error: URL present but it's a remote placeholder service.
+			if ( false !== strpos( $attrs_raw, '"url"' ) &&
+				preg_match( '#picsum\.photos|placehold\.co|placeholder\.com|loremflickr\.com|dummyimage\.com#', $attrs_raw ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'error',
+					'remote_placeholder_in_media_block',
+					sprintf( 'Standalone core/%s uses a remote placeholder image service URL. Use plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/FILENAME\' instead.', $block_name )
+				);
+				continue;
+			}
+
+			// URL present with no id attribute at all — only allowed when the URL is a
+			// plugin asset reference. Warn if it looks like a non-plugin URL.
+			if ( false !== strpos( $attrs_raw, '"url"' ) &&
+				! preg_match( '/"id"\s*:\s*[1-9][0-9]*/', $attrs_raw ) &&
+				! preg_match( '/plugin_dir_url|assets\/images|assets\/icons/', $attrs_raw ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'warning',
+					'standalone_media_url_without_id',
 					sprintf(
-						'Standalone core/%s uses a URL without a real media attachment ID. Ask the user for the media URL and ID before writing the final pattern.',
+						'Standalone core/%s has a URL with no attachment id. This is fine for plugin asset URLs (plugin_dir_url). For real media library images, provide a real attachment ID or ask the user for it.',
 						$block_name
 					)
 				);
@@ -985,9 +1013,28 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 			'ollie-button-fill'  => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"className":"is-style-fill"} --><div class="wp-block-button is-style-fill"><a class="wp-block-button__link wp-element-button">Discover More</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
 
 
-			// TRUSTED: editor-safe Cover shape for image-card badge overlays. Replace IMAGE_URL,
-			// IMAGE_ID, and label text only; preserve wrapper classes and inner-container shape.
-			'article-cover-card-with-pill' => '<!-- wp:cover {"url":"IMAGE_URL","id":IMAGE_ID,"dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} --><div class="wp-block-cover has-custom-content-position is-position-top-left is-light"><span aria-hidden="true" class="wp-block-cover__background has-background-dim-0 has-background-dim" style="background-color:#c8cecf"></span><img class="wp-block-cover__image-background wp-image-IMAGE_ID size-full" alt="" src="IMAGE_URL" data-object-fit="cover"/><div class="wp-block-cover__inner-container"><!-- wp:group {"style":{"spacing":{"margin":{"top":"1.25rem","left":"1.25rem"},"padding":{"top":"0.25rem","right":"0.75rem","bottom":"0.25rem","left":"0.75rem"}},"border":{"radius":"var:preset|border-radius|full"}},"backgroundColor":"primary-accent","layout":{"type":"constrained"}} --><div class="wp-block-group has-primary-accent-background-color has-background" style="margin-top:1.25rem;margin-left:1.25rem;border-radius:var(--wp--preset--border-radius--full);padding-top:0.25rem;padding-right:0.75rem;padding-bottom:0.25rem;padding-left:0.75rem"><!-- wp:paragraph {"style":{"typography":{"fontWeight":"500"}},"textColor":"main","fontSize":"x-small"} --><p class="has-main-color has-text-color has-x-small-font-size" style="font-weight:500">Harvest</p><!-- /wp:paragraph --></div><!-- /wp:group --></div></div><!-- /wp:cover -->',
+			// TRUSTED: editor-safe Cover shape for image-card badge overlays.
+			// Two variants:
+			// 1. Plugin asset URL (no id attribute — correct for dhali-pattern-library placeholder images).
+			//    Use plugin_dir_url( dirname( __FILE__ ) ) to build the URL in the PHP content string.
+			// 2. Real media library image (requires a real integer id and wp-image-ID class).
+			// Preserve wrapper classes and inner-container shape in both cases.
+			'article-cover-card-with-pill' =>
+				'<!-- wp:cover {"url":"PLUGIN_ASSET_URL","dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->' .
+				'<div class="wp-block-cover has-custom-content-position is-position-top-left is-light">' .
+				'<span aria-hidden="true" class="wp-block-cover__background has-background-dim-0 has-background-dim" style="background-color:#c8cecf"></span>' .
+				'<img class="wp-block-cover__image-background size-full" alt="" src="PLUGIN_ASSET_URL" data-object-fit="cover"/>' .
+				'<div class="wp-block-cover__inner-container">' .
+				'<!-- wp:group {"style":{"spacing":{"margin":{"top":"1.25rem","left":"1.25rem"},"padding":{"top":"0.25rem","right":"0.75rem","bottom":"0.25rem","left":"0.75rem"}},"border":{"radius":"var:preset|border-radius|full"}},"backgroundColor":"primary-accent","layout":{"type":"constrained"}} -->' .
+				'<div class="wp-block-group has-primary-accent-background-color has-background" style="margin-top:1.25rem;margin-left:1.25rem;border-radius:var(--wp--preset--border-radius--full);padding-top:0.25rem;padding-right:0.75rem;padding-bottom:0.25rem;padding-left:0.75rem">' .
+				'<!-- wp:paragraph {"style":{"typography":{"fontWeight":"500"}},"textColor":"main","fontSize":"x-small"} --><p class="has-main-color has-text-color has-x-small-font-size" style="font-weight:500">Category</p><!-- /wp:paragraph -->' .
+				'</div><!-- /wp:group -->' .
+				'</div></div><!-- /wp:cover -->',
+
+			'article-cover-card-with-pill-note' =>
+				'For plugin placeholder assets, omit the id attribute entirely — no id:0, no wp-image-ID class on the <img>. ' .
+				'Replace PLUGIN_ASSET_URL with: \' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/placeholder-wide-16x9.webp\' ) . \' ' .
+				'For real media library images, add "id":INTEGER and wp-image-INTEGER class to the <img>.',
 
 			// CORRECT pattern for all decorative/AI-generated icon SVGs.
 			// Use outermost/icon-block with iconName:"" and the full SVG embedded.

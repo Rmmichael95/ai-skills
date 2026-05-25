@@ -482,7 +482,7 @@ Hard errors for generated final patterns:
 - Do not use remote placeholder image services.
 - Do not use generated block-level `style.css` for clipping.
 
-If a screenshot-matched design requires a real image and no real project media URL/ID is known, stop and ask the user for the asset.
+For standalone patterns, use plugin placeholder assets from `assets/images/` via `plugin_dir_url( dirname( __FILE__ ) )` — no attachment ID required. Only ask the user for a real media URL and ID when the design requires a specific real-world image that the plugin assets cannot substitute.
 
 ## Screenshot Reference Workflow
 
@@ -558,10 +558,12 @@ Never use `get_template_directory_uri()` — that resolves to the Ollie theme, n
 
 ### Card with Cover image and badge (visual containment)
 
-Use this shape when a badge or label must appear inside the image area. The badge lives inside `wp-block-cover__inner-container`. Replace `IMAGE_URL` and `IMAGE_ID` with real values. Use trusted or editor-copied Cover markup — do not generate the Cover shape from memory.
+Use `core/cover` when a badge or label must appear visually inside the image area. The badge lives inside `wp-block-cover__inner-container`. Do not substitute `core/group + backgroundImage` — that block cannot contain inner blocks overlaid on the image; children will stack above or below the background, not inside it.
+
+**Plugin asset (no attachment ID)** — use when the image is a plugin placeholder asset. Omit `id` entirely and omit `wp-image-*` class from the `<img>`.
 
 ```html
-<!-- wp:cover {"url":"IMAGE_URL","id":IMAGE_ID,"dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->
+<!-- wp:cover {"url":"' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/placeholder-wide-16x9.webp' ) . '","dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->
 <div
   class="wp-block-cover has-custom-content-position is-position-top-left is-light"
 >
@@ -571,13 +573,38 @@ Use this shape when a badge or label must appear inside the image area. The badg
     style="background-color:#c8cecf"
   ></span>
   <img
-    class="wp-block-cover__image-background wp-image-IMAGE_ID size-full"
+    class="wp-block-cover__image-background size-full"
     alt=""
-    src="IMAGE_URL"
+    src="' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/placeholder-wide-16x9.webp' ) . '"
     data-object-fit="cover"
   />
   <div class="wp-block-cover__inner-container">
-    <!-- badge or label block goes here, inside the image -->
+    <!-- badge or label block goes here -->
+  </div>
+</div>
+<!-- /wp:cover -->
+```
+
+**Real media library image** — use when a real attachment URL and ID are known. Include the `id` attribute and `wp-image-ID` class.
+
+```html
+<!-- wp:cover {"url":"REAL_URL","id":REAL_INT_ID,"dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->
+<div
+  class="wp-block-cover has-custom-content-position is-position-top-left is-light"
+>
+  <span
+    aria-hidden="true"
+    class="wp-block-cover__background has-background-dim-0 has-background-dim"
+    style="background-color:#c8cecf"
+  ></span>
+  <img
+    class="wp-block-cover__image-background wp-image-REAL_INT_ID size-full"
+    alt=""
+    src="REAL_URL"
+    data-object-fit="cover"
+  />
+  <div class="wp-block-cover__inner-container">
+    <!-- badge or label block goes here -->
   </div>
 </div>
 <!-- /wp:cover -->
