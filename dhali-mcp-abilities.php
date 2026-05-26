@@ -821,6 +821,73 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		}
 	}
 
+	// ── Pattern metadata checks ───────────────────────────────────────────────
+
+	// The outermost block group should include metadata.name, metadata.categories,
+	// and metadata.patternName for discoverability and pattern override support.
+	// Only check the FIRST wp:group block (the outermost section wrapper).
+	if ( preg_match( '/<!--\s*wp:group\s+(\{.*?\})\s*-->/s', $markup, $first_group ) ) {
+		$first_attrs = json_decode( isset( $first_group[1] ) ? $first_group[1] : '{}', true );
+
+		if ( is_array( $first_attrs ) ) {
+			$metadata = isset( $first_attrs['metadata'] ) ? $first_attrs['metadata'] : array();
+
+			if ( empty( $metadata['patternName'] ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'info',
+					'missing_pattern_name_metadata',
+					'The outermost core/group block is missing metadata.patternName (e.g. "dhali-patterns/pattern-slug"). Adding it enables pattern overrides and improves editor discoverability.'
+				);
+			}
+		}
+	}
+
+	// ── WP 7 Block API v3 serializer shape checks ──────────────────────────────
+
+	// core/group: "border" must be inside "style", never a top-level block attribute.
+	// A top-level "border" key causes "Block contains unexpected or invalid content" in WP 7.
+	if ( preg_match_all( '/<!--\s*wp:group\s+(\{.*?\})\s*-->/s', $markup, $group_blocks, PREG_SET_ORDER ) ) {
+		foreach ( $group_blocks as $idx => $group_block ) {
+			$attrs_raw = isset( $group_block[1] ) ? $group_block[1] : '';
+			$label     = 'core/group #' . ( $idx + 1 );
+
+			$attrs = json_decode( $attrs_raw, true );
+			if ( is_array( $attrs ) && isset( $attrs['border'] ) && ! isset( $attrs['style']['border'] ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'error',
+					'group_border_at_top_level',
+					$label . ' has "border" as a top-level block attribute. In WP 7/Block API v3, border radius and other border properties must be nested inside "style": {"style":{"border":{"radius":"..."}}}. A top-level "border" key causes "Block contains unexpected or invalid content".'
+				);
+			}
+		}
+	}
+
+	// core/cover: WP 7 serializer class order — is-light must come BEFORE position classes.
+	if ( preg_match_all( '/<!--\s*wp:cover\s+[^>]*-->(.*?)<!--\s*\/wp:cover\s*-->/s', $markup, $cover_html_blocks, PREG_SET_ORDER ) ) {
+		foreach ( $cover_html_blocks as $idx => $block ) {
+			$body  = isset( $block[1] ) ? $block[1] : '';
+			$label = 'core/cover #' . ( $idx + 1 );
+
+			// is-light appearing AFTER has-custom-content-position is a WP 7 serializer mismatch.
+			if ( preg_match( '/has-custom-content-position[^"]*is-light/', $body ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'error',
+					'cover_is_light_class_order',
+					$label . ' has is-light after has-custom-content-position in the class list. WP 7 Block API v3 serializer outputs is-light FIRST. Correct order: class="wp-block-cover is-light has-custom-content-position is-position-*".'
+				);
+			}
+
+			// <span> before <img> is old serializer order; WP 7 uses <img> before <span>.
+			if ( preg_match( '/wp-block-cover__background.*?wp-block-cover__image-background/s', $body ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'error',
+					'cover_span_before_img',
+					$label . ' has <span class="wp-block-cover__background"> before <img class="wp-block-cover__image-background">. WP 7 serializer outputs <img> before <span>. Use the article-cover-card-with-pill snippet from dhali/get-editor-safe-block-snippets.'
+				);
+			}
+		}
+	}
+
 	// ── Cover serializer checks ─────────────────────────────────────────────
 
 	if ( preg_match_all( '/<!--\s*wp:cover\s+(\{.*?\})\s*-->(.*?)<!--\s*\/wp:cover\s*-->/s', $markup, $cover_blocks, PREG_SET_ORDER ) ) {
@@ -1014,27 +1081,33 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 
 
 			// TRUSTED: editor-safe Cover shape for image-card badge overlays.
-			// Two variants:
-			// 1. Plugin asset URL (no id attribute — correct for dhali-pattern-library placeholder images).
-			//    Use plugin_dir_url( dirname( __FILE__ ) ) to build the URL in the PHP content string.
-			// 2. Real media library image (requires a real integer id and wp-image-ID class).
-			// Preserve wrapper classes and inner-container shape in both cases.
+			// Serializer shape verified against WP 7.0 Block API v3:
+			// - Class order: is-light FIRST, then position classes
+			// - <img> BEFORE <span> in the saved HTML
+			// - All border-radius values (including "0") in the inline style
+			// - Badge pill border radius INSIDE "style" (NOT as a top-level "border" key)
+			// - minHeight included in block attrs when a fixed height is needed
+			// For plugin asset URLs: omit id attribute entirely, no wp-image-* class.
+			// For real media library images: add "id":INTEGER and wp-image-INTEGER class.
 			'article-cover-card-with-pill' =>
-				'<!-- wp:cover {"url":"PLUGIN_ASSET_URL","dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->' .
-				'<div class="wp-block-cover has-custom-content-position is-position-top-left is-light">' .
-				'<span aria-hidden="true" class="wp-block-cover__background has-background-dim-0 has-background-dim" style="background-color:#c8cecf"></span>' .
+				'<!-- wp:cover {"url":"PLUGIN_ASSET_URL","dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"minHeight":240,"sizeSlug":"full","contentPosition":"top left","isDark":false,"style":{"border":{"radius":{"topLeft":"var:preset|border-radius|lg","topRight":"var:preset|border-radius|lg","bottomLeft":"0","bottomRight":"0"}}}} -->' .
+				'<div class="wp-block-cover is-light has-custom-content-position is-position-top-left" style="border-top-left-radius:var(--wp--preset--border-radius--lg);border-top-right-radius:var(--wp--preset--border-radius--lg);border-bottom-left-radius:0;border-bottom-right-radius:0;min-height:240px">' .
 				'<img class="wp-block-cover__image-background size-full" alt="" src="PLUGIN_ASSET_URL" data-object-fit="cover"/>' .
+				'<span aria-hidden="true" class="wp-block-cover__background has-background-dim-0 has-background-dim" style="background-color:#c8cecf"></span>' .
 				'<div class="wp-block-cover__inner-container">' .
-				'<!-- wp:group {"style":{"spacing":{"margin":{"top":"1.25rem","left":"1.25rem"},"padding":{"top":"0.25rem","right":"0.75rem","bottom":"0.25rem","left":"0.75rem"}},"border":{"radius":"var:preset|border-radius|full"}},"backgroundColor":"primary-accent","layout":{"type":"constrained"}} -->' .
-				'<div class="wp-block-group has-primary-accent-background-color has-background" style="margin-top:1.25rem;margin-left:1.25rem;border-radius:var(--wp--preset--border-radius--full);padding-top:0.25rem;padding-right:0.75rem;padding-bottom:0.25rem;padding-left:0.75rem">' .
+				'<!-- wp:group {"style":{"border":{"radius":"var:preset|border-radius|full"},"spacing":{"margin":{"top":"1.25rem","left":"1.25rem"},"padding":{"top":"0.25rem","right":"0.75rem","bottom":"0.25rem","left":"0.75rem"}}},"backgroundColor":"primary-accent","layout":{"type":"constrained"}} -->' .
+				'<div class="wp-block-group has-primary-accent-background-color has-background" style="border-radius:var(--wp--preset--border-radius--full);margin-top:1.25rem;margin-left:1.25rem;padding-top:0.25rem;padding-right:0.75rem;padding-bottom:0.25rem;padding-left:0.75rem">' .
 				'<!-- wp:paragraph {"style":{"typography":{"fontWeight":"500"}},"textColor":"main","fontSize":"x-small"} --><p class="has-main-color has-text-color has-x-small-font-size" style="font-weight:500">Category</p><!-- /wp:paragraph -->' .
 				'</div><!-- /wp:group -->' .
 				'</div></div><!-- /wp:cover -->',
 
 			'article-cover-card-with-pill-note' =>
-				'For plugin placeholder assets, omit the id attribute entirely — no id:0, no wp-image-ID class on the <img>. ' .
-				'Replace PLUGIN_ASSET_URL with: \' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/placeholder-wide-16x9.webp\' ) . \' ' .
-				'For real media library images, add "id":INTEGER and wp-image-INTEGER class to the <img>.',
+				'WP 7 serializer rules for cover+badge patterns: ' .
+				'(1) Cover div class order: is-light FIRST, then has-custom-content-position, then is-position-*. ' .
+				'(2) <img> comes BEFORE <span> in the saved HTML. ' .
+				'(3) All border-radius values including "0" appear in the inline style. ' .
+				'(4) Badge pill border radius must be inside "style": {"style":{"border":{"radius":"..."},"spacing":{...}}} — NEVER as a top-level "border" key on core/group. ' .
+				'(5) For plugin placeholder assets: omit id, omit wp-image-* class. Replace PLUGIN_ASSET_URL with: \' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/placeholder-wide-16x9.webp\' ) . \'',
 
 			// CORRECT pattern for all decorative/AI-generated icon SVGs.
 			// Use outermost/icon-block with iconName:"" and the full SVG embedded.

@@ -347,6 +347,13 @@ If any check fails, report the failure, fix the file, and rerun only the failed 
 - Custom SVG icon blocks must include the saved `<!-- wp:outermost/icon-block ... -->` wrapper and matching closing comment.
 - Keep generated PHP strings intact; avoid line wrapping that splits JSON keys, class names, or CSS variable names.
 
+**WP 7 / Block API v3 serializer rules:**
+
+- `core/group` border radius must always be inside `"style"` → `{"style":{"border":{"radius":"..."}}}`. A top-level `"border"` key on `core/group` causes "Block contains unexpected or invalid content". This is a silent failure — the linter catches it but `parse_blocks()` does not.
+- `core/cover` class order: `is-light` must come **before** `has-custom-content-position` and `is-position-*`. Wrong order triggers the same block invalidation error.
+- `core/cover` child order: `<img>` must come **before** `<span>` in the saved HTML.
+- Always fetch `article-cover-card-with-pill` from `dhali/get-editor-safe-block-snippets` for cover+badge patterns. Do not write Cover saved markup from memory.
+
 ## Pattern Authoring Safety MCP Tools
 
 ### `dhali/lint-pattern-authoring-rules`
@@ -556,55 +563,72 @@ Never use `get_template_directory_uri()` — that resolves to the Ollie theme, n
 <!-- /wp:group -->
 ```
 
+### Article card — inset image vs edge-to-edge image
+
+Choose the card structure based on whether the image should bleed to the card edges or sit inside padding.
+
+**Inset image card** — image has padding on all sides, sits inside the card shell:
+
+```
+core/group [card — radius:lg, shadow, padding:medium all sides, bg:base, constrained]
+  core/cover [full radius, no minHeight needed — image provides natural height]
+    core/group [badge pill]
+  core/group [date / heading / read more — no extra padding needed]
+```
+
+**Edge-to-edge image card** — image fills the top of the card, bleeds to card edges:
+
+```
+core/group [card — radius:lg, shadow, NO padding, bg:base, constrained]
+  core/cover [topLeft:lg, topRight:lg, bottomLeft:0, bottomRight:0, minHeight:240]
+    core/group [badge pill]
+  core/group [content body — padding:medium, constrained]
+    date / heading / read more
+```
+
+For the edge-to-edge variant, the card group must have zero padding so the cover reaches the card edges and the top-only lg border-radius clips the image corners correctly. The content group below the cover carries the padding.
+
 ### Card with Cover image and badge (visual containment)
 
-Use `core/cover` when a badge or label must appear visually inside the image area. The badge lives inside `wp-block-cover__inner-container`. Do not substitute `core/group + backgroundImage` — that block cannot contain inner blocks overlaid on the image; children will stack above or below the background, not inside it.
+Use `core/cover` when a badge or label must appear visually inside the image area. The badge lives inside `wp-block-cover__inner-container`. Do not substitute `core/group + backgroundImage` — that block cannot contain inner blocks overlaid on the image.
 
-**Plugin asset (no attachment ID)** — use when the image is a plugin placeholder asset. Omit `id` entirely and omit `wp-image-*` class from the `<img>`.
+**WP 7 / Block API v3 serializer rules for Cover:**
+
+- Cover div class order: `is-light` **first**, then `has-custom-content-position`, then `is-position-*`
+- `<img>` comes **before** `<span>` in the saved HTML
+- All border-radius values (including `0`) appear in the inline style
+- Badge pill border radius: must be inside `"style"` → `{"style":{"border":{"radius":"..."},"spacing":{...}}}`. **Never** a top-level `"border"` key on `core/group`.
+
+Fetch `article-cover-card-with-pill` from `dhali/get-editor-safe-block-snippets` and copy it exactly. Do not write Cover saved markup from memory.
+
+**Plugin asset variant (no attachment ID):**
 
 ```html
-<!-- wp:cover {"url":"' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/placeholder-wide-16x9.webp' ) . '","dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->
+<!-- wp:cover {"url":"' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/placeholder-wide-16x9.webp' ) . '","dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"minHeight":240,"sizeSlug":"full","contentPosition":"top left","isDark":false,"style":{"border":{"radius":{"topLeft":"var:preset|border-radius|lg","topRight":"var:preset|border-radius|lg","bottomLeft":"0","bottomRight":"0"}}}} -->
 <div
-  class="wp-block-cover has-custom-content-position is-position-top-left is-light"
+  class="wp-block-cover is-light has-custom-content-position is-position-top-left"
+  style="border-top-left-radius:var(--wp--preset--border-radius--lg);border-top-right-radius:var(--wp--preset--border-radius--lg);border-bottom-left-radius:0;border-bottom-right-radius:0;min-height:240px"
 >
-  <span
-    aria-hidden="true"
-    class="wp-block-cover__background has-background-dim-0 has-background-dim"
-    style="background-color:#c8cecf"
-  ></span>
   <img
     class="wp-block-cover__image-background size-full"
     alt=""
     src="' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/placeholder-wide-16x9.webp' ) . '"
     data-object-fit="cover"
   />
-  <div class="wp-block-cover__inner-container">
-    <!-- badge or label block goes here -->
-  </div>
-</div>
-<!-- /wp:cover -->
-```
-
-**Real media library image** — use when a real attachment URL and ID are known. Include the `id` attribute and `wp-image-ID` class.
-
-```html
-<!-- wp:cover {"url":"REAL_URL","id":REAL_INT_ID,"dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"sizeSlug":"full","contentPosition":"top left","isDark":false} -->
-<div
-  class="wp-block-cover has-custom-content-position is-position-top-left is-light"
->
   <span
     aria-hidden="true"
     class="wp-block-cover__background has-background-dim-0 has-background-dim"
     style="background-color:#c8cecf"
   ></span>
-  <img
-    class="wp-block-cover__image-background wp-image-REAL_INT_ID size-full"
-    alt=""
-    src="REAL_URL"
-    data-object-fit="cover"
-  />
   <div class="wp-block-cover__inner-container">
-    <!-- badge or label block goes here -->
+    <!-- wp:group {"style":{"border":{"radius":"var:preset|border-radius|full"},"spacing":{"margin":{"top":"1.25rem","left":"1.25rem"},"padding":{"top":"0.25rem","right":"0.75rem","bottom":"0.25rem","left":"0.75rem"}}},"backgroundColor":"primary-accent","layout":{"type":"constrained"}} -->
+    <div
+      class="wp-block-group has-primary-accent-background-color has-background"
+      style="border-radius:var(--wp--preset--border-radius--full);margin-top:1.25rem;margin-left:1.25rem;padding-top:0.25rem;padding-right:0.75rem;padding-bottom:0.25rem;padding-left:0.75rem"
+    >
+      <!-- badge content -->
+    </div>
+    <!-- /wp:group -->
   </div>
 </div>
 <!-- /wp:cover -->
