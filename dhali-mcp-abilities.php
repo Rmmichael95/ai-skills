@@ -844,6 +844,54 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 
 	// ── WP 7 Block API v3 serializer shape checks ──────────────────────────────
 
+	// Flex groups with justifyContent need the matching items-justified-* class in
+	// both the className attribute and the rendered div. Without it, the CSS
+	// justification has no effect and elements stack at flex-start regardless of the
+	// layout attribute value. Most commonly hits space-between title/icon rows.
+	$justify_map = array(
+		'space-between' => 'items-justified-space-between',
+		'center'        => 'items-justified-center',
+		'right'         => 'items-justified-right',
+		'space-around'  => 'items-justified-space-around',
+		'space-evenly'  => 'items-justified-space-evenly',
+	);
+	if ( preg_match_all( '/<!--\s*wp:group\s+(\{.*?\})\s*-->(.*?)<!--\s*\/wp:group\s*-->/s', $markup, $flex_groups, PREG_SET_ORDER ) ) {
+		foreach ( $flex_groups as $idx => $group ) {
+			$attrs_raw  = isset( $group[1] ) ? $group[1] : '';
+			$inner_html = isset( $group[2] ) ? $group[2] : '';
+			$label      = 'core/group #' . ( $idx + 1 );
+			$attrs      = json_decode( $attrs_raw, true );
+
+			if ( ! is_array( $attrs ) ) {
+				continue;
+			}
+
+			$justify = isset( $attrs['layout']['justifyContent'] ) ? $attrs['layout']['justifyContent'] : '';
+			if ( empty( $justify ) || $justify === 'left' ) {
+				continue;
+			}
+
+			$expected_class = isset( $justify_map[ $justify ] ) ? $justify_map[ $justify ] : '';
+			if ( empty( $expected_class ) ) {
+				continue;
+			}
+
+			$class_name = isset( $attrs['className'] ) ? $attrs['className'] : '';
+			if ( false === strpos( $class_name, $expected_class ) ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'error',
+					'flex_group_missing_justify_class',
+					sprintf(
+						'%s has layout.justifyContent:"%s" but is missing the "%s" class in className. Add it to both the className block attribute and the rendered div class list, or the justification will not apply.',
+						$label,
+						$justify,
+						$expected_class
+					)
+				);
+			}
+		}
+	}
+
 	// core/group: "border" must be inside "style", never a top-level block attribute.
 	// A top-level "border" key causes "Block contains unexpected or invalid content" in WP 7.
 	if ( preg_match_all( '/<!--\s*wp:group\s+(\{.*?\})\s*-->/s', $markup, $group_blocks, PREG_SET_ORDER ) ) {
@@ -1053,7 +1101,7 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 function dhali_mcp_get_editor_safe_block_snippets_data() {
 	return array(
 		'guidelines' => array(
-			'Decorative and AI-generated icon SVGs must use outermost/icon-block with iconName:"" and the full SVG embedded inside .icon-container. Do not use core/html for decorative icons.',
+			'Before placing any decorative icon, call dhali/get-local-assets and select from the icon_selection_guide: check.svg for lists/features, arrow-right.svg for CTAs/navigation, plus.svg for add actions, question.svg as the default, image.svg for media contexts, user.svg for person contexts. Read the chosen file with @wp_cli raw cat and embed the SVG in outermost/icon-block with iconName:"". Only generate a custom SVG when none of the six static icons fit.',
 			'Circular plus CTAs should use plus-cta-linked-group-icon: a native linked core/group wrapper with a known-good wordpress-plus icon block and full SVG path. Do not default to core/html. Do not manually generate custom styled core/button plus buttons.',
 			'Use outermost/icon-block with a named iconName only for known-good editor-saved icon slugs with full SVG paths.',
 			'Use native Ollie/editor button markup for CTAs. core/html is diagnostic fallback only, not a default CTA strategy.',
@@ -1126,15 +1174,25 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 				'<!-- /wp:group -->',
 
 			'flex-group-horizontal' =>
-				'<!-- wp:group {"style":{"spacing":{"blockGap":"var:preset|spacing|medium"}},"layout":{"type":"flex","orientation":"horizontal","flexWrap":"nowrap","justifyContent":"left","verticalAlignment":"center"}} -->' .
+				'<!-- wp:group {"className":"is-layout-flex is-horizontal wp-block-group-is-layout-flex","style":{"spacing":{"blockGap":"var:preset|spacing|medium"}},"layout":{"type":"flex","orientation":"horizontal","flexWrap":"nowrap","justifyContent":"left","verticalAlignment":"center"}} -->' .
 				'<div class="wp-block-group is-layout-flex is-horizontal wp-block-group-is-layout-flex">' .
 				'</div>' .
 				'<!-- /wp:group -->',
 
+			// Space-between: heading/content left, icon/element pushed to far right.
+			// CRITICAL: items-justified-space-between MUST appear in both className and the div class list.
+			// Without it, justifyContent:space-between in the layout attrs has no effect — elements stack at flex-start.
+			'flex-group-horizontal-space-between' =>
+				'<!-- wp:group {"className":"is-layout-flex is-horizontal wp-block-group-is-layout-flex items-justified-space-between","style":{"spacing":{"blockGap":"var:preset|spacing|medium"}},"layout":{"type":"flex","orientation":"horizontal","flexWrap":"nowrap","justifyContent":"space-between","verticalAlignment":"center"}} -->' .
+				'<div class="wp-block-group is-layout-flex is-horizontal wp-block-group-is-layout-flex items-justified-space-between">' .
+				'</div>' .
+				'<!-- /wp:group -->',
+
 			'flex-group-note' =>
-				'Use flex-group-vertical or flex-group-horizontal for any core/group with layout.type "flex". ' .
+				'Use flex-group-vertical, flex-group-horizontal, or flex-group-horizontal-space-between for any core/group with layout.type "flex". ' .
 				'Never generate flex group HTML from scratch. ' .
-				'Required: layout classes (is-layout-flex, is-vertical/is-horizontal, wp-block-group-is-layout-flex). ' .
+				'Required: layout classes (is-layout-flex, is-vertical/is-horizontal, wp-block-group-is-layout-flex) in BOTH className attr and div. ' .
+				'For space-between: also add items-justified-space-between to BOTH className attr and div — without it the layout defaults to flex-start regardless of the justifyContent attr value. ' .
 				'Required: blockGap omitted from inline style entirely — no gap: and no --wp--style--block-gap: in style="".',
 
 			'card-with-shadow' =>
@@ -1756,7 +1814,16 @@ PHP;
 					'image_php_pattern' => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '",
 					'icon_php_pattern'  => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/icons/FILENAME' ) . '",
 					'fallback_pattern'  => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '",
-					'message'           => count( $images ) . ' images and ' . count( $icons ) . ' icons available in the dhali-pattern-library plugin assets. Replace FILENAME with a listed filename. Use plugin_dir_url( dirname( __FILE__ ) ) — do not use dhali_pattern_library_image_url() unless you have confirmed the helper functions are registered in the plugin.',
+					'icon_selection_guide' => array(
+						'check.svg'       => 'Feature lists, benefits, confirmations, included items, bullet points',
+						'arrow-right.svg' => 'Directional CTAs, navigation links, read-more, next steps, flows',
+						'plus.svg'        => 'Add actions, expand, create, open, subscription CTAs',
+						'question.svg'    => 'Default decorative icon — use when no other icon fits the context',
+						'image.svg'       => 'Media, gallery, photography, visual content contexts',
+						'user.svg'        => 'Person, author, avatar, team member, profile contexts',
+					),
+					'icon_read_instruction' => 'To embed a static icon: read the file with @wp_cli raw cat PLUGIN_PATH/assets/icons/FILENAME.svg then place the SVG markup inside outermost/icon-block with iconName:"". Do not generate a custom SVG if a static icon fits.',
+					'message'           => count( $images ) . ' images and ' . count( $icons ) . ' icons available. Select from icon_selection_guide, read the SVG file, and embed it. Only generate a custom SVG when no static icon fits the design.',
 				);
 			},
 			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },

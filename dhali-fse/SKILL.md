@@ -151,10 +151,46 @@ For card-like patterns:
 
 ### Flex group className rule
 
-When a `core/group` uses `layout.type: "flex"`, the layout classes must appear in **both** the `className` block attribute and the rendered `<div>` class list:
+When a `core/group` uses `layout.type: "flex"`, the layout classes must appear in **both** the `className` block attribute and the rendered `<div>` class list. The `justifyContent` value maps to an `items-justified-*` class that must also be included in both places.
 
-- Vertical: `"className":"is-layout-flex is-vertical wp-block-group-is-layout-flex"`
-- Horizontal: `"className":"is-layout-flex is-horizontal wp-block-group-is-layout-flex"`
+**Vertical flex:**
+
+```json
+"className": "is-layout-flex is-vertical wp-block-group-is-layout-flex"
+```
+
+```html
+<div
+  class="wp-block-group is-layout-flex is-vertical wp-block-group-is-layout-flex ..."
+></div>
+```
+
+**Horizontal flex — left-aligned (default):**
+
+```json
+"className": "is-layout-flex is-horizontal wp-block-group-is-layout-flex"
+```
+
+```html
+<div
+  class="wp-block-group is-layout-flex is-horizontal wp-block-group-is-layout-flex ..."
+></div>
+```
+
+**Horizontal flex — space-between (heading left, icon/element right):**
+
+```json
+"className": "is-layout-flex is-horizontal wp-block-group-is-layout-flex items-justified-space-between",
+"layout": {"type":"flex","orientation":"horizontal","flexWrap":"nowrap","justifyContent":"space-between","verticalAlignment":"center"}
+```
+
+```html
+<div
+  class="wp-block-group is-layout-flex is-horizontal wp-block-group-is-layout-flex items-justified-space-between ..."
+></div>
+```
+
+`items-justified-space-between` is required in both `className` and the div class list for the block support system to apply the correct CSS. Without it, `justifyContent:space-between` in the block attrs has no effect — the layout defaults to flex-start and elements stack at the left instead of spreading apart.
 
 Omitting `className` from the block attributes causes a serializer mismatch.
 
@@ -173,7 +209,38 @@ The proposal may describe the _type_ of content in each slot ("section heading",
 
 ### Icon SVG lookup rule
 
-Before generating a custom SVG for an icon, check what SVG files are available in the plugin's `assets/icons/` directory via `dhali/get-local-assets`. If a matching or close icon exists, read its file contents using `@wp_cli raw cat FILEPATH` and embed the SVG markup directly inside `outermost/icon-block` with `iconName:""`. Only generate a custom SVG when no available icon file is a reasonable match.
+Always use a static SVG from the plugin's `assets/icons/` directory before generating a custom SVG. The static icons cover the majority of use cases. Use this selection table:
+
+| Icon file         | Use when                                                              |
+| :---------------- | :-------------------------------------------------------------------- |
+| `check.svg`       | Feature lists, benefits, confirmations, included items, bullet points |
+| `arrow-right.svg` | Directional CTAs, navigation links, read-more, next steps, flows      |
+| `plus.svg`        | Add actions, expand, create, open, subscription CTAs                  |
+| `question.svg`    | Default decorative icon — use when no other icon fits the context     |
+| `image.svg`       | Media, gallery, photography, visual content contexts                  |
+| `user.svg`        | Person, author, avatar, team member, profile contexts                 |
+
+**Required workflow before placing any icon:**
+
+1. Call `dhali/get-local-assets` to confirm the icons directory and available filenames.
+2. Select the best match from the table above.
+3. Read the SVG file contents: `@wp_cli raw cat PATH_TO_PLUGIN/assets/icons/FILENAME.svg`
+4. Embed the SVG markup inside `outermost/icon-block` with `iconName:""`:
+
+```html
+<!-- wp:outermost/icon-block {"iconName":"","width":"56px"} -->
+<div class="wp-block-outermost-icon-block">
+  <div
+    class="icon-container"
+    style="width:56px;transform:rotate(0deg) scaleX(1) scaleY(1)"
+  >
+    SVG_CONTENTS_HERE
+  </div>
+</div>
+<!-- /wp:outermost/icon-block -->
+```
+
+Only generate a custom SVG when the design requires an icon that genuinely cannot be served by any of the six static files (for example, a specific branded illustration). State clearly in the proposal which icon file is being used or why a custom SVG was necessary.
 
 ### Post card rule
 
