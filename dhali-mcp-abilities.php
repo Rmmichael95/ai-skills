@@ -721,6 +721,33 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 		);
 	}
 
+	// core/html must never be used for icon SVGs. Any core/html block containing an <svg>
+	// element with a width/height <= 200px (icon-sized) should use outermost/icon-block
+	// with iconName:"" instead. question.svg from the plugin assets is the mandatory fallback
+	// when no static icon matches the design.
+	if ( preg_match_all( '/<!--\s*wp:html\s*-->(.*?)<!--\s*\/wp:html\s*-->/s', $markup, $html_blocks, PREG_SET_ORDER ) ) {
+		foreach ( $html_blocks as $html_block ) {
+			$body = isset( $html_block[1] ) ? $html_block[1] : '';
+
+			if ( ! preg_match( '/<svg\b/', $body ) ) {
+				continue;
+			}
+
+			// Check if it looks icon-sized: width/height attribute or style <= 200px.
+			$is_icon_sized = preg_match( '/(?:width|height)\s*[=:]\s*["\']?(\d+)(?:px)?["\']?/i', $body, $size_match )
+				&& isset( $size_match[1] )
+				&& (int) $size_match[1] <= 200;
+
+			if ( $is_icon_sized ) {
+				$issues[] = dhali_mcp_pattern_issue(
+					'error',
+					'core_html_used_for_icon_svg',
+					'core/html contains an icon-sized SVG (width/height ≤ 200px). Use outermost/icon-block with iconName:"" instead. Select a static icon from the plugin\'s assets/icons/ directory — if none match, question.svg is the mandatory default. Never use core/html as a fallback for decorative icons.'
+				);
+			}
+		}
+	}
+
 	// ── Media / image checks ───────────────────────────────────────────────
 
 	if ( preg_match( '/"useFeaturedImage"\s*:\s*true/', $markup ) &&
@@ -1101,7 +1128,7 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
 function dhali_mcp_get_editor_safe_block_snippets_data() {
 	return array(
 		'guidelines' => array(
-			'Before placing any decorative icon, call dhali/get-local-assets and select from the icon_selection_guide: check.svg for lists/features, arrow-right.svg for CTAs/navigation, plus.svg for add actions, question.svg as the default, image.svg for media contexts, user.svg for person contexts. Read the chosen file with @wp_cli raw cat and embed the SVG in outermost/icon-block with iconName:"". Only generate a custom SVG when none of the six static icons fit.',
+			'ICON RULE (NO EXCEPTIONS): Never use core/html for icon SVGs. Never generate a custom SVG path because the source design shows a different shape. Always use outermost/icon-block with iconName:"" and a static SVG read from the plugin\'s assets/icons/ directory. If no icon matches the design — use question.svg. That is the mandatory default. The only permitted exception is a client-provided branded SVG that must be reproduced exactly.',
 			'Circular plus CTAs should use plus-cta-linked-group-icon: a native linked core/group wrapper with a known-good wordpress-plus icon block and full SVG path. Do not default to core/html. Do not manually generate custom styled core/button plus buttons.',
 			'Use outermost/icon-block with a named iconName only for known-good editor-saved icon slugs with full SVG paths.',
 			'Use native Ollie/editor button markup for CTAs. core/html is diagnostic fallback only, not a default CTA strategy.',

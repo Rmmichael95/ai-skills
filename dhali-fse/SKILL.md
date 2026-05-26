@@ -13,6 +13,7 @@ You are an expert WordPress frontend architect. Your objective is to author prec
 - **Intent beats appearance:** Do not infer dynamic behavior from visual styling alone. A card that contains an image, category, date, title, and read-more link is a static visual source by default, not a dynamic post block.
 - **Preserve visual containment:** If an element visually appears inside another region — a badge inside an image, text over a cover, an icon inside a pill — that containment must be preserved in the block structure. Do not silently move overlaid or nested elements outside their source container.
 - **No emojis:** Never use emojis anywhere in generated code, comments, docs, or final pattern content.
+- **No `core/html` for icons:** `core/html` is never acceptable for icon SVGs. All icons use `outermost/icon-block` with `iconName:""` and a static SVG from the plugin's `assets/icons/` directory. `question.svg` is the mandatory default when no other icon matches. Never generate a custom SVG path simply because the source design shows a different geometric shape.
 - **No remote placeholders:** Never use remote placeholder image URLs and never reference Ollie theme assets (`get_template_directory_uri()`). All images and icons in patterns must come from the `dhali-pattern-library` plugin's own `assets/` directory. The primary PHP pattern for all asset references inside pattern files is `plugin_dir_url( dirname( __FILE__ ) )`. Do not use `dhali_pattern_library_image_url()` or `dhali_pattern_library_icon_url()` unless you have confirmed those helper functions are defined in the plugin. Call `dhali/get-local-assets` to get the confirmed asset list and PHP pattern before writing any pattern that references images or icons.
 - **No guessing:** Use the existing context file first, then WordPress MCP abilities for small live facts, then `@wp_cli` only when MCP lacks the needed fact.
 - **No invented tokens:** Use the Ollie Pro token slugs listed in this skill. Do not invent CSS classes, preset slugs, color hexes, or spacing names.
@@ -207,25 +208,27 @@ Omitting `className` from the block attributes causes a serializer mismatch.
 
 The proposal may describe the _type_ of content in each slot ("section heading", "date line", "excerpt"), but the written PHP file must use placeholder text throughout. This is a hard rule — the pattern is a scaffold, not a content copy.
 
-### Icon SVG lookup rule
+### Icon SVG lookup rule (mandatory — no exceptions)
 
-Always use a static SVG from the plugin's `assets/icons/` directory before generating a custom SVG. The static icons cover the majority of use cases. Use this selection table:
+**`core/html` is never acceptable for icon SVGs.** All icon SVGs use `outermost/icon-block` with `iconName:""`. All icons use a static file from the plugin's `assets/icons/` directory. `question.svg` is the mandatory default for any design that doesn't match the other five.
+
+Use this selection table. If the icon in the source design doesn't look like check, arrow, plus, image, or user — use `question.svg`. Do not generate a custom SVG path to better match the source design's exact shape. The static icon is the scaffold; the site editor replaces it with real content.
 
 | Icon file         | Use when                                                              |
 | :---------------- | :-------------------------------------------------------------------- |
 | `check.svg`       | Feature lists, benefits, confirmations, included items, bullet points |
 | `arrow-right.svg` | Directional CTAs, navigation links, read-more, next steps, flows      |
 | `plus.svg`        | Add actions, expand, create, open, subscription CTAs                  |
-| `question.svg`    | Default decorative icon — use when no other icon fits the context     |
+| `question.svg`    | **Everything else — mandatory default when no other icon fits**       |
 | `image.svg`       | Media, gallery, photography, visual content contexts                  |
 | `user.svg`        | Person, author, avatar, team member, profile contexts                 |
 
-**Required workflow before placing any icon:**
+**Required workflow — no step may be skipped:**
 
 1. Call `dhali/get-local-assets` to confirm the icons directory and available filenames.
-2. Select the best match from the table above.
-3. Read the SVG file contents: `@wp_cli raw cat PATH_TO_PLUGIN/assets/icons/FILENAME.svg`
-4. Embed the SVG markup inside `outermost/icon-block` with `iconName:""`:
+2. Select the best match from the table above. If none match — choose `question.svg`.
+3. Read the SVG file: `@wp_cli raw cat PATH_TO_PLUGIN/assets/icons/FILENAME.svg`
+4. Embed the SVG inside `outermost/icon-block` with `iconName:""`.
 
 ```html
 <!-- wp:outermost/icon-block {"iconName":"","width":"56px"} -->
@@ -240,7 +243,7 @@ Always use a static SVG from the plugin's `assets/icons/` directory before gener
 <!-- /wp:outermost/icon-block -->
 ```
 
-Only generate a custom SVG when the design requires an icon that genuinely cannot be served by any of the six static files (for example, a specific branded illustration). State clearly in the proposal which icon file is being used or why a custom SVG was necessary.
+**Generating a custom SVG path is only permitted** when the client has provided a specific branded SVG that must be reproduced exactly and that SVG is different from all six static icons. State this explicitly in the proposal. It is never permitted simply because the source design shows a different geometric shape than the static icons.
 
 ### Post card rule
 
@@ -533,18 +536,27 @@ Do not generate custom `outermost/icon-block` SVG markup from scratch. Use `oute
 
 Named Outermost/Ollie icons must include the saved SVG path. Do not output an empty SVG shell.
 
-### Custom SVG rule
+### Custom SVG via outermost/icon-block
 
-For AI-generated decorative SVGs with no editor-safe snippet available, use `core/html`:
+**Never use `core/html` for any icon SVG.** All icon SVGs — whether from the plugin's static files or custom-generated — must use `outermost/icon-block` with `iconName:""`. First check the plugin's static icons and use `question.svg` if none match exactly. Only generate a custom SVG path when the design requires a specific branded illustration that `question.svg` genuinely cannot approximate.
 
 ```html
-<!-- wp:html -->
-<div style="width:56px;line-height:0" aria-hidden="true">
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false">
-    <path fill="#7f8b72" d="..."></path>
-  </svg>
+<!-- wp:outermost/icon-block {"iconName":"","width":"56px"} -->
+<div class="wp-block-outermost-icon-block">
+  <div
+    class="icon-container"
+    style="width:56px;transform:rotate(0deg) scaleX(1) scaleY(1)"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 64 64"
+      focusable="false"
+    >
+      <path fill="#7f8b72" d="REAL_PATH_DATA" />
+    </svg>
+  </div>
 </div>
-<!-- /wp:html -->
+<!-- /wp:outermost/icon-block -->
 ```
 
 ## Image and Cover Safety Rules
