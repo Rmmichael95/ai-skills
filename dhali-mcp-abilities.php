@@ -1125,35 +1125,6 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
  *
  * @return array<string, mixed>
  */
-function dhali_mcp_get_editor_safe_block_snippets_data() {
-	return array(
-		'guidelines' => array(
-			'ICON RULE (NO EXCEPTIONS): Never use core/html for icon SVGs. Never generate a custom SVG path because the source design shows a different shape. Always use outermost/icon-block with iconName:"" and a static SVG read from the plugin\'s assets/icons/ directory. If no icon matches the design — use question.svg. That is the mandatory default. The only permitted exception is a client-provided branded SVG that must be reproduced exactly.',
-			'Circular plus CTAs should use plus-cta-linked-group-icon: a native linked core/group wrapper with a known-good wordpress-plus icon block and full SVG path. Do not default to core/html. Do not manually generate custom styled core/button plus buttons.',
-			'Use outermost/icon-block with a named iconName only for known-good editor-saved icon slugs with full SVG paths.',
-			'Use native Ollie/editor button markup for CTAs. core/html is diagnostic fallback only, not a default CTA strategy.',
-			'Use core/image for ordinary images. Use core/cover only from editor-copied markup, user-provided markup, or trusted snippets. Do not generate final Cover markup from memory. Use useFeaturedImage:true only in Query Loop or post-template context.',
-			'Final generated patterns must not use id:0, wp-image-0, remote placeholder images, or generated overflow:hidden style.css.',
-			'If a screenshot-matched card needs a real image and no media URL/id is known, ask for the asset before writing the final pattern.',
-			'When fontSize is a preset slug (e.g. "base"), the <a> element must have has-{slug}-font-size only. Never add has-custom-font-size alongside a preset fontSize. For plus CTAs, prefer plus-cta-linked-group-icon or exact editor-copied/Ollie button markup.',
-			'CONFIRMED by editor testing: core/group with layout.type "flex" must include className with the layout classes (is-layout-flex, is-vertical/is-horizontal, wp-block-group-is-layout-flex) in BOTH the block attributes and the rendered div. blockGap must NOT appear in the inline style attribute.',
-		),
-		'snippets'   => array(
-
-			// TRUSTED: native/editor-safe plus CTA shape. This keeps the CTA block-native
-			// and editable: linked core/group wrapper + known-good wordpress-plus icon block
-			// with full saved SVG path. Prefer this over core/html and over hand-generated
-			// custom core/button plus markup.
-			'plus-cta-linked-group-icon' => '<!-- wp:group {"style":{"color":{"background":"#fff29e"},"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}},"spacing":{"padding":{"top":"0.5rem","bottom":"0.5rem","left":"0.5rem","right":"0.5rem"}}},"layout":{"type":"constrained"},"href":"#","linkDestination":"custom","animationType":"scaleOnHover"} --><div class="wp-block-group has-background" style="border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);background-color:#fff29e;padding-top:0.5rem;padding-right:0.5rem;padding-bottom:0.5rem;padding-left:0.5rem"><!-- wp:outermost/icon-block {"iconName":"wordpress-plus","customIconBackgroundColor":"#fff29e","width":"30px"} --><div class="wp-block-outermost-icon-block"><div class="icon-container" style="width:30px;transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 12.5V17.5H12.5V12.5H17.5V11H12.5V6H11V11H6V12.5H11Z"></path></svg></div></div><!-- /wp:outermost/icon-block --></div><!-- /wp:group -->',
-			'plus-cta-button'            => '<!-- wp:group {"style":{"color":{"background":"#fff29e"},"border":{"radius":{"topLeft":"var:preset|border-radius|full","topRight":"var:preset|border-radius|full","bottomLeft":"var:preset|border-radius|full","bottomRight":"var:preset|border-radius|full"}},"spacing":{"padding":{"top":"0.5rem","bottom":"0.5rem","left":"0.5rem","right":"0.5rem"}}},"layout":{"type":"constrained"},"href":"#","linkDestination":"custom","animationType":"scaleOnHover"} --><div class="wp-block-group has-background" style="border-top-left-radius:var(--wp--preset--border-radius--full);border-top-right-radius:var(--wp--preset--border-radius--full);border-bottom-left-radius:var(--wp--preset--border-radius--full);border-bottom-right-radius:var(--wp--preset--border-radius--full);background-color:#fff29e;padding-top:0.5rem;padding-right:0.5rem;padding-bottom:0.5rem;padding-left:0.5rem"><!-- wp:outermost/icon-block {"iconName":"wordpress-plus","customIconBackgroundColor":"#fff29e","width":"30px"} --><div class="wp-block-outermost-icon-block"><div class="icon-container" style="width:30px;transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 12.5V17.5H12.5V12.5H17.5V11H12.5V6H11V11H6V12.5H11Z"></path></svg></div></div><!-- /wp:outermost/icon-block --></div><!-- /wp:group -->',
-
-			// Diagnostic fallback only. Do not use as the default CTA strategy.
-			'plus-cta-html-diagnostic-fallback' => '<!-- wp:html --><a href="#" aria-label="Read more" style="display:inline-flex;align-items:center;justify-content:center;width:3rem;height:3rem;border-radius:999px;background:#fff29e;color:#1E1E26;text-decoration:none;font-size:1.5rem;line-height:1;">+</a><!-- /wp:html -->',
-
-			// Ollie-style button examples. These are intentionally simple/editor-native.
-			'ollie-button-light' => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"className":"is-style-button-light"} --><div class="wp-block-button is-style-button-light"><a class="wp-block-button__link wp-element-button">Download Ollie</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
-			'ollie-button-fill'  => '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"className":"is-style-fill"} --><div class="wp-block-button is-style-fill"><a class="wp-block-button__link wp-element-button">Discover More</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
-
 
 			// TRUSTED: editor-safe Cover shape for image-card badge overlays.
 			// Serializer shape verified against WP 7.0 Block API v3:
@@ -1176,66 +1147,6 @@ function dhali_mcp_get_editor_safe_block_snippets_data() {
 				'</div><!-- /wp:group -->' .
 				'</div></div><!-- /wp:cover -->',
 
-			'article-cover-card-with-pill-note' =>
-				'WP 7 serializer rules for cover+badge patterns: ' .
-				'(1) Cover div class order: is-light FIRST, then has-custom-content-position, then is-position-*. ' .
-				'(2) <img> comes BEFORE <span> in the saved HTML. ' .
-				'(3) All border-radius values including "0" appear in the inline style. ' .
-				'(4) Badge pill border radius must be inside "style": {"style":{"border":{"radius":"..."},"spacing":{...}}} — NEVER as a top-level "border" key on core/group. ' .
-				'(5) For plugin placeholder assets: omit id, omit wp-image-* class. Replace PLUGIN_ASSET_URL with: \' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . \'assets/images/placeholder-wide-16x9.webp\' ) . \'',
-
-			// CORRECT pattern for all decorative/AI-generated icon SVGs.
-			// Use outermost/icon-block with iconName:"" and the full SVG embedded.
-			// Do not use core/html for decorative icons.
-			'custom-svg-via-icon-block' => '<!-- wp:outermost/icon-block {"iconName":"","width":"64px"} --><div class="wp-block-outermost-icon-block"><div class="icon-container" style="width:64px;transform:rotate(0deg) scaleX(1) scaleY(1)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false"><path fill="#7f8b72" d="REPLACE_WITH_REAL_PATH_DATA"/></svg></div></div><!-- /wp:outermost/icon-block -->',
-
-			// CONFIRMED by editor testing (2026-05):
-			// - Layout classes ARE required: is-layout-flex, is-vertical, wp-block-group-is-layout-flex
-			// - blockGap must NOT appear in the inline style attribute
-			// - Other style properties (padding, border-radius, shadow) DO go in the inline style normally
-			// - gap: or --wp--style--block-gap: in the style attribute causes "invalid content" error
-			'flex-group-vertical' =>
-				'<!-- wp:group {"className":"is-layout-flex is-vertical wp-block-group-is-layout-flex","style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"},"blockGap":"var:preset|spacing|small"},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"flex","orientation":"vertical","flexWrap":"nowrap"}} -->' .
-				'<div class="wp-block-group is-layout-flex is-vertical wp-block-group-is-layout-flex has-base-background-color has-background" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)">' .
-				'</div>' .
-				'<!-- /wp:group -->',
-
-			'flex-group-horizontal' =>
-				'<!-- wp:group {"className":"is-layout-flex is-horizontal wp-block-group-is-layout-flex","style":{"spacing":{"blockGap":"var:preset|spacing|medium"}},"layout":{"type":"flex","orientation":"horizontal","flexWrap":"nowrap","justifyContent":"left","verticalAlignment":"center"}} -->' .
-				'<div class="wp-block-group is-layout-flex is-horizontal wp-block-group-is-layout-flex">' .
-				'</div>' .
-				'<!-- /wp:group -->',
-
-			// Space-between: heading/content left, icon/element pushed to far right.
-			// CRITICAL: items-justified-space-between MUST appear in both className and the div class list.
-			// Without it, justifyContent:space-between in the layout attrs has no effect — elements stack at flex-start.
-			'flex-group-horizontal-space-between' =>
-				'<!-- wp:group {"className":"is-layout-flex is-horizontal wp-block-group-is-layout-flex items-justified-space-between","style":{"spacing":{"blockGap":"var:preset|spacing|medium"}},"layout":{"type":"flex","orientation":"horizontal","flexWrap":"nowrap","justifyContent":"space-between","verticalAlignment":"center"}} -->' .
-				'<div class="wp-block-group is-layout-flex is-horizontal wp-block-group-is-layout-flex items-justified-space-between">' .
-				'</div>' .
-				'<!-- /wp:group -->',
-
-			'flex-group-note' =>
-				'Use flex-group-vertical, flex-group-horizontal, or flex-group-horizontal-space-between for any core/group with layout.type "flex". ' .
-				'Never generate flex group HTML from scratch. ' .
-				'Required: layout classes (is-layout-flex, is-vertical/is-horizontal, wp-block-group-is-layout-flex) in BOTH className attr and div. ' .
-				'For space-between: also add items-justified-space-between to BOTH className attr and div — without it the layout defaults to flex-start regardless of the justifyContent attr value. ' .
-				'Required: blockGap omitted from inline style entirely — no gap: and no --wp--style--block-gap: in style="".',
-
-			'card-with-shadow' =>
-				'<!-- wp:group {"style":{"spacing":{"padding":{"top":"var:preset|spacing|medium","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|medium","left":"var:preset|spacing|medium"}},"border":{"radius":"var:preset|border-radius|lg"},"shadow":"var:preset|shadow|small-light"},"backgroundColor":"base","layout":{"type":"constrained"}} -->' .
-				'<div class="wp-block-group has-base-background-color has-background" style="border-radius:var(--wp--preset--border-radius--lg);padding-top:var(--wp--preset--spacing--medium);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--medium);padding-left:var(--wp--preset--spacing--medium);box-shadow:var(--wp--preset--shadow--small-light)">' .
-				'</div>' .
-				'<!-- /wp:group -->',
-
-			'static-cover-card-note' =>
-				'For standalone screenshot cards: use core/cover only from editor-copied or trusted snippet markup with explicit real media url, id (integer > 0), sizeSlug, saved <img> markup, background span, and inner-container. Never generate Cover from memory. Never use useFeaturedImage:true outside Query Loop or post template context. Never use id:0, wp-image-0, placeholder image URLs, or overflow:hidden style.css.',
-
-			'static-image-card-note' =>
-				'Use core/image for ordinary screenshot-matched featured images when no overlay content is required. Provide a real attachment ID.',
-		),
-	);
-}
 
 // ─── Ability registration ─────────────────────────────────────────────────────
 
@@ -1360,58 +1271,65 @@ function dhali_register_mcp_abilities() {
 		// ── dhali/get-pattern-template-skeleton ──────────────────────────────
 		// FIX: Now returns the active plugin and patterns paths so the agent
 		// knows the write destination without guessing or scanning.
-		'dhali/get-pattern-template-skeleton' => array(
-			'label'               => __( 'Get pattern template skeleton', 'dhali' ),
-			'description'         => __( 'Returns the standard PHP return-array skeleton and write paths for Dhali block patterns.', 'dhali' ),
+		// ── dhali/get-plugin-paths ───────────────────────────────────────────
+		// Sole purpose: return live filesystem paths the agent cannot know without WP.
+		// PHP skeleton, viewportWidth, categories are static — documented in prompt.
+		'dhali/get-plugin-paths' => array(
+			'label'               => __( 'Get plugin paths', 'dhali' ),
+			'description'         => __( 'Returns live plugin_path, patterns_path, and snippets_path for the dhali-pattern-library plugin. Also confirms viewportWidth and plugin_dir_url pattern.', 'dhali' ),
 			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema( 'pattern_template_skeleton', 'Use "pattern_template_skeleton".' ),
+			'input_schema'        => dhali_mcp_request_input_schema( 'plugin_paths', 'Use "plugin_paths".' ),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
-					'categories'    => dhali_mcp_string_array_schema( 'Default pattern categories.' ),
-					'keywords'      => dhali_mcp_string_array_schema( 'Default pattern keyword placeholders.' ),
-					'viewportWidth' => array( 'type' => 'integer', 'description' => 'Default preview viewport width.' ),
-					'blockTypes'    => dhali_mcp_string_array_schema( 'Default block type associations.' ),
-					'plugin_path'   => dhali_mcp_string_schema( 'Absolute path to the dhali-pattern-library plugin directory.' ),
-					'patterns_path' => dhali_mcp_string_schema( 'Absolute path to the patterns subdirectory where PHP files are written.' ),
-					'php_skeleton'  => dhali_mcp_string_schema( 'PHP return-array skeleton for a new pattern file.' ),
+					'plugin_path'    => dhali_mcp_string_schema( 'Absolute path to the dhali-pattern-library plugin directory.' ),
+					'patterns_path'  => dhali_mcp_string_schema( 'Absolute path to the patterns/ subdirectory.' ),
+					'snippets_path'  => dhali_mcp_string_schema( 'Absolute path to the snippets/ subdirectory.' ),
+					'asset_url_pattern' => dhali_mcp_string_schema( 'PHP pattern for asset URLs inside pattern content strings.' ),
+					'viewportWidth'  => array( 'type' => 'integer', 'description' => 'Always 1500.' ),
 				),
-				'required'   => array( 'categories', 'keywords', 'viewportWidth', 'blockTypes', 'plugin_path', 'patterns_path', 'php_skeleton' ),
+				'required'   => array( 'plugin_path', 'patterns_path', 'snippets_path', 'asset_url_pattern', 'viewportWidth' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
 				$plugin_dir    = defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : ( WP_CONTENT_DIR . '/plugins' );
 				$plugin_path   = trailingslashit( $plugin_dir ) . 'Dhali-Pattern-Library';
 				$patterns_path = trailingslashit( $plugin_path ) . 'patterns';
-
-				$php_skeleton = <<<'PHP'
-<?php
-return array(
-	'title'         => __( 'Pattern Title', 'dhali' ),
-	'categories'    => array( 'dhali-web-development', 'card' ),
-	'description'   => _x( 'One sentence describing the pattern.', 'Block pattern description', 'dhali' ),
-	'keywords'      => array( 'keyword', 'section' ),
-	'viewportWidth' => 1500,
-	'blockTypes'    => array( 'core/group' ),
-	'content'       => '
-<!-- wp:group {"align":"full","style":{"spacing":{"padding":{"top":"var:preset|spacing|xx-large","right":"var:preset|spacing|medium","bottom":"var:preset|spacing|xx-large","left":"var:preset|spacing|medium"},"margin":{"top":"0","bottom":"0"}}},"backgroundColor":"base","layout":{"type":"constrained"}} -->
-<div class="wp-block-group alignfull has-base-background-color has-background" style="margin-top:0;margin-bottom:0;padding-top:var(--wp--preset--spacing--xx-large);padding-right:var(--wp--preset--spacing--medium);padding-bottom:var(--wp--preset--spacing--xx-large);padding-left:var(--wp--preset--spacing--medium)">
-	<!-- wp:heading {"textAlign":"center","fontSize":"x-large"} -->
-	<h2 class="wp-block-heading has-text-align-center has-x-large-font-size">' . esc_html__( 'Pattern Heading', 'dhali' ) . '</h2>
-	<!-- /wp:heading -->
-</div>
-<!-- /wp:group -->
-',
-);
-PHP;
+				$snippets_path = trailingslashit( $plugin_path ) . 'snippets';
 
 				return array(
-					'categories'    => array( 'dhali-web-development', 'card' ),
-					'keywords'      => array(),
-					'viewportWidth' => 1500,
-					'blockTypes'    => array( 'core/group' ),
+					'plugin_path'       => $plugin_path,
+					'patterns_path'     => $patterns_path,
+					'snippets_path'     => $snippets_path,
+					'asset_url_pattern' => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '",
+					'viewportWidth'     => 1500,
+				);
+			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
+			'meta'                => dhali_mcp_public_tool_meta(),
+		),
+
+		// Legacy alias — kept for backwards compatibility with older prompts.
+		'dhali/get-pattern-template-skeleton' => array(
+			'label'               => __( 'Get plugin paths (legacy)', 'dhali' ),
+			'description'         => __( 'Deprecated alias for dhali/get-plugin-paths. Use get-plugin-paths instead.', 'dhali' ),
+			'category'            => 'site',
+			'input_schema'        => dhali_mcp_request_input_schema( 'pattern_template_skeleton', 'Use "pattern_template_skeleton".' ),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'plugin_path'   => dhali_mcp_string_schema( 'Plugin directory path.' ),
+					'patterns_path' => dhali_mcp_string_schema( 'Patterns subdirectory path.' ),
+					'snippets_path' => dhali_mcp_string_schema( 'Snippets subdirectory path.' ),
+				),
+				'required' => array( 'plugin_path', 'patterns_path', 'snippets_path' ),
+			),
+			'execute_callback'    => function ( $input = array() ) {
+				$plugin_dir    = defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : ( WP_CONTENT_DIR . '/plugins' );
+				$plugin_path   = trailingslashit( $plugin_dir ) . 'Dhali-Pattern-Library';
+				return array(
 					'plugin_path'   => $plugin_path,
-					'patterns_path' => $patterns_path,
-					'php_skeleton'  => $php_skeleton,
+					'patterns_path' => trailingslashit( $plugin_path ) . 'patterns',
+					'snippets_path' => trailingslashit( $plugin_path ) . 'snippets',
 				);
 			},
 			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
@@ -1585,29 +1503,12 @@ PHP;
 		),
 
 		// ── dhali/get-editor-safe-block-snippets ─────────────────────────────
-		'dhali/get-editor-safe-block-snippets' => array(
-			'label'               => __( 'Get editor-safe block snippets', 'dhali' ),
-			'description'         => __( 'Returns known-good editor-safe snippets and composition guidance for fragile block types.', 'dhali' ),
-			'category'            => 'site',
-			'input_schema'        => dhali_mcp_request_input_schema( 'editor_safe_block_snippets', 'Use "editor_safe_block_snippets".' ),
-			'output_schema'       => array(
-				'type'       => 'object',
-				'properties' => array(
-					'guidelines' => dhali_mcp_string_array_schema( 'Editor-safe authoring guidelines.' ),
-					'snippets'   => array(
-						'type'                 => 'object',
-						'description'          => 'Map of snippet names to saved block markup or guidance strings.',
-						'additionalProperties' => array( 'type' => 'string' ),
-					),
-				),
-				'required'   => array( 'guidelines', 'snippets' ),
-			),
-			'execute_callback'    => function ( $input = array() ) {
-				return dhali_mcp_get_editor_safe_block_snippets_data();
-			},
-			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
-			'meta'                => dhali_mcp_public_tool_meta(),
-		),
+		// dhali/get-editor-safe-block-snippets removed.
+		// HTML snippets now live as static files in plugin/snippets/.
+		// Read with: @wp_cli raw cat PLUGIN_PATH/snippets/FILENAME.html
+		// Available: cover-with-badge.html, plus-cta.html, flex-vertical.html,
+		//            flex-horizontal.html, flex-space-between.html, card-shadow.html, social-links.html
+		// get-local-assets returns the full snippets list alongside images and icons.
 
 		// ── dhali/test-pattern-in-editor-context ─────────────────────────────
 		// FIX: Draft is now only created when lint passes (zero errors). Previously
@@ -1718,6 +1619,247 @@ PHP;
 		),
 
 		// ── dhali/sync-context ───────────────────────────────────────────────
+		// ── dhali/get-pattern-approach ──────────────────────────────────────────
+		// Agentic routing: given a pattern type, returns the specific block tree,
+		// required MCP abilities, and validation requirements for that type.
+		'dhali/get-pattern-approach' => array(
+			'label'               => __( 'Get pattern approach', 'dhali' ),
+			'description'         => __( 'Given a pattern type, returns the canonical block tree, required MCP fetches, and validation requirements. Call after classifying the design source.', 'dhali' ),
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'pattern_type' => array(
+						'type'        => 'string',
+						'description' => 'The classified pattern type.',
+						'enum'        => array( 'hero', 'cta', 'feature-grid', 'testimonial', 'pricing', 'card', 'contact', 'post-card', 'intro', 'other' ),
+					),
+				),
+				'required'             => array( 'pattern_type' ),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'pattern_type'       => array( 'type' => 'string' ),
+					'visual_signals'     => array( 'type' => 'string', 'description' => 'How to identify this type visually.' ),
+					'required_mcp'       => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'MCP abilities to call for this type.' ),
+					'block_tree'         => array( 'type' => 'string', 'description' => 'Canonical block structure for this type.' ),
+					'deep_validation'    => array( 'type' => 'string', 'description' => 'When deep editor-context validation is required.' ),
+					'ollie_slugs'        => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Reference Ollie pattern slugs for this type.' ),
+					'notes'              => array( 'type' => 'string', 'description' => 'Type-specific authoring notes.' ),
+				),
+				'required' => array( 'pattern_type', 'visual_signals', 'required_mcp', 'block_tree', 'deep_validation' ),
+			),
+			'execute_callback'    => function ( $input = array() ) {
+				$type = isset( $input['pattern_type'] ) ? $input['pattern_type'] : 'other';
+
+				$approaches = array(
+
+					'hero' => array(
+						'pattern_type'    => 'hero',
+						'visual_signals'  => 'Full-width section, large heading (often centered), short subtext, one or two CTA buttons. May have a background image or solid color fill. Often the first section on a page.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets', 'dhali/get-local-assets' ),
+						'block_tree'      =>
+							"core/group [section — align:full, bg:tertiary or main, padding:xx-large v / medium h, constrained, margin:0]\n" .
+							"  core/group [Hero — constrained]\n" .
+							"    core/paragraph [overline — primary color, fontWeight:500, small, center]\n" .
+							"    core/heading [h1 or h2 — x-large or xx-large, center]\n" .
+							"    core/paragraph [subtext — secondary color, center]\n" .
+							"    core/buttons [CTA row — center]\n" .
+							"      core/button [is-style-fill]\n" .
+							"      core/button [is-style-button-light] (optional second)\n" .
+							"  [OPTIONAL] core/columns [50/50 — align:wide, verticalAlignment:center]\n" .
+							"    core/column [content — heading, paragraph, buttons]\n" .
+							"    core/column [image — core/cover or core/image]",
+						'deep_validation' => 'Always — hero patterns almost always include core/cover for background images or linked CTA groups.',
+						'ollie_slugs'     => array( 'ollie/hero-text-image-and-logos', 'ollie/hero-light', 'ollie/hero-dark' ),
+						'notes'           => 'Use tertiary background for light heroes, main for dark. Overline paragraph (primary color, fontWeight:500, small) above the heading is the Ollie standard. Button row uses is-style-fill for primary and is-style-button-light for secondary.',
+					),
+
+					'cta' => array(
+						'pattern_type'    => 'cta',
+						'visual_signals'  => 'Heading + one or two buttons. Often centered or 50/50 columns (text left, action right). No card shell, no image (or small supporting image). Purpose is to drive a single action.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets' ),
+						'block_tree'      =>
+							"Centered variant:\n" .
+							"  core/group [section — align:full, bg, padding:xx-large/medium, constrained]\n" .
+							"    core/paragraph [overline]\n" .
+							"    core/heading [center]\n" .
+							"    core/paragraph [center, secondary]\n" .
+							"    core/buttons [center]\n" .
+							"\n" .
+							"50/50 columns variant:\n" .
+							"  core/group [section — align:full]\n" .
+							"    core/columns [align:wide, verticalAlignment:center, blockGap:x-large]\n" .
+							"      core/column [content — overline, heading, paragraph]\n" .
+							"      core/column [action — paragraph secondary, core/buttons]",
+						'deep_validation' => 'Only if CTA uses a linked core/group (href + animationType). Standard core/buttons with core/button do not require deep validation.',
+						'ollie_slugs'     => array( 'ollie/text-call-to-action', 'ollie/card-text-and-call-to-action' ),
+						'notes'           => 'Use core/buttons + core/button (is-style-fill / is-style-button-light) — never plus-cta-linked-group for page-level CTAs. The plus CTA is for card-level micro-CTAs only.',
+					),
+
+					'feature-grid' => array(
+						'pattern_type'    => 'feature-grid',
+						'visual_signals'  => 'Three or four equal columns, each with an icon at the top, a bold heading, and a short paragraph. May include a section title group above the grid.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets', 'dhali/get-local-assets' ),
+						'block_tree'      =>
+							"core/group [section — align:full, bg, padding:xx-large/medium, constrained, blockGap:x-large]\n" .
+							"  core/group [Titles — constrained, blockGap:small]\n" .
+							"    core/paragraph [overline — primary, fontWeight:500, small]\n" .
+							"    core/heading [center]\n" .
+							"    core/paragraph [center, secondary] (optional)\n" .
+							"  core/columns [align:wide, blockGap on both axes]\n" .
+							"    core/column × N\n" .
+							"      outermost/icon-block [iconName:\"\", 48-64px, static SVG from assets/icons/]\n" .
+							"      core/heading [h3, medium or large]\n" .
+							"      core/paragraph",
+						'deep_validation' => 'Always — outermost/icon-block with a read SVG always triggers deep validation.',
+						'ollie_slugs'     => array( 'ollie/feature-boxes-with-icon-dark', 'ollie/feature-boxes-with-button', 'ollie/text-and-image-columns-with-icons' ),
+						'notes'           => 'Icon selection: check.svg for features/benefits, question.svg as default. Read SVG from assets/icons/ with @wp_cli raw cat. Embed in outermost/icon-block with iconName:"". Never use core/html for icons.',
+					),
+
+					'testimonial' => array(
+						'pattern_type'    => 'testimonial',
+						'visual_signals'  => 'Quote text, star rating (★★★★★), person name and role, avatar photo. Usually 2-3 testimonials in a grid. May include logo strip.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-local-assets' ),
+						'block_tree'      =>
+							"core/group [section — align:full, bg, padding:xx-large/medium, constrained, blockGap:x-large]\n" .
+							"  core/group [Titles]\n" .
+							"    core/paragraph [overline]\n" .
+							"    core/heading [center]\n" .
+							"  core/columns [testimonial grid — align:wide]\n" .
+							"    core/column × N\n" .
+							"      core/group [Testimonial — bg:base, radius:lg, shadow, padding:medium, constrained]\n" .
+							"        core/paragraph [★★★★★ — primary color]\n" .
+							"        core/paragraph [quote text]\n" .
+							"        core/separator [is-style-separator-thin]\n" .
+							"        core/group [Cite — flex horizontal, blockGap:small, verticalAlignment:center]\n" .
+							"          core/image [avatar — is-style-rounded-full, width:60px, height:60px, src:avatar-placeholder.webp]\n" .
+							"          core/group [Name + role — flex vertical, blockGap:0]\n" .
+							"            core/paragraph [name — fontWeight:600, small]\n" .
+							"            core/paragraph [role — secondary, x-small]",
+						'deep_validation' => 'Rarely required. No cover, no linked groups, no icon-block. Skip unless fast validation returns warnings.',
+						'ollie_slugs'     => array( 'ollie/testimonials-and-logos', 'ollie/text-and-image-columns-with-testimonial', 'ollie/testimonial-highlight' ),
+						'notes'           => 'Avatar: core/image with className:is-style-rounded-full, width/height:60px, src from plugin assets (avatar-placeholder.webp). Stars are the literal ★ character in a paragraph with textColor:primary. Never use core/html for stars.',
+					),
+
+					'pricing' => array(
+						'pattern_type'    => 'pricing',
+						'visual_signals'  => 'Price amount (large number + period), feature list with checkmarks (✓), 2-3 tier columns, CTA button at the bottom of each tier.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets', 'dhali/get-local-assets' ),
+						'block_tree'      =>
+							"core/group [section — align:full, bg:tertiary, padding:xx-large/medium, constrained, blockGap:x-large]\n" .
+							"  core/group [Titles]\n" .
+							"    core/paragraph [overline]\n" .
+							"    core/heading [center]\n" .
+							"  core/columns [pricing grid — align:wide, blockGap:large]\n" .
+							"    core/column × N\n" .
+							"      core/group [Pricing Table — bg:base or main (featured), radius:lg, shadow, padding:large, constrained, blockGap:medium]\n" .
+							"        core/group [Price — blockGap:small]\n" .
+							"          core/heading [tier name, h3]\n" .
+							"          core/paragraph [tier description, secondary]\n" .
+							"          core/group [price amount — flex, blockGap:0]\n" .
+							"            core/heading [price, xx-large, fontWeight:700]\n" .
+							"            core/paragraph [/period, secondary, aligned bottom]\n" .
+							"        core/separator [is-style-separator-thin]\n" .
+							"        core/group [Features — blockGap:small]\n" .
+							"          [repeat per feature:]\n" .
+							"          core/group [Feature — flex horizontal nowrap, blockGap:small]\n" .
+							"            core/paragraph [✓ — fontWeight:700]\n" .
+							"            core/paragraph [feature text]\n" .
+							"          core/separator [is-style-separator-thin, bg:border-light]\n" .
+							"        core/buttons [CTA — full width]\n" .
+							"          core/button [is-style-fill or is-style-button-light]",
+						'deep_validation' => 'Only if CTA uses a linked core/group. Standard core/buttons does not require deep validation.',
+						'ollie_slugs'     => array( 'ollie/pricing-table', 'ollie/pricing-table-with-testimonials' ),
+						'notes'           => 'The ✓ character (not check.svg) is standard in pricing feature rows per Ollie patterns — it is a text character inside a bold paragraph, not an icon block. Use check.svg icon-block only when the design explicitly shows a graphic icon rather than a text character.',
+					),
+
+					'card' => array(
+						'pattern_type'    => 'card',
+						'visual_signals'  => 'Single card with rounded corners and shadow, containing image and/or content. Check get-editor-safe-block-snippets for card-structure-choose to pick the right variant (inset / edge-to-edge / overlapping).',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets', 'dhali/get-local-assets' ),
+						'block_tree'      => 'Fetch card-structure-choose from get-editor-safe-block-snippets and select the correct variant based on how the image relates to the card boundary.',
+						'deep_validation' => 'Always if the card includes core/cover (badge-in-image, edge-to-edge, or overlapping variants). Always if outermost/icon-block with SVG is used.',
+						'ollie_slugs'     => array( 'ollie/card-text-and-call-to-action', 'ollie/image-and-numbered-features' ),
+						'notes'           => 'See card-structure-inset-image, card-structure-edge-to-edge-image, card-structure-overlapping-content-box in get-editor-safe-block-snippets for the three structural variants.',
+					),
+
+					'contact' => array(
+						'pattern_type'    => 'contact',
+						'visual_signals'  => 'Business name, hours, phone/email, social media icons. Often includes a photo header. May show multiple locations.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets', 'dhali/get-local-assets' ),
+						'block_tree'      =>
+							"Use card-structure-overlapping-content-box from get-editor-safe-block-snippets.\n" .
+							"Inside the content group:\n" .
+							"  core/heading [business name, center, fontWeight:700]\n" .
+							"  core/paragraph [tagline, center, main-accent]\n" .
+							"  core/separator [is-style-separator-thin]\n" .
+							"  core/group [Hours — flex vertical, blockGap:small]\n" .
+							"    core/paragraph [<strong>Open:</strong> placeholder, center] × rows\n" .
+							"  core/paragraph [contact info, center, x-small, main-accent]\n" .
+							"  core/social-links [center, is-style-logos-only, justifyContent:center]",
+						'deep_validation' => 'Always — uses core/cover for the top image.',
+						'ollie_slugs'     => array(),
+						'notes'           => 'Social icons MUST use core/social-links + core/social-link, not question.svg. Use url:"#" as placeholder. core/social-link supports self-closing syntax (/-->).',
+					),
+
+					'post-card' => array(
+						'pattern_type'    => 'post-card',
+						'visual_signals'  => 'Article card with date, category, title, excerpt, and read-more. May have a category badge overlaid on the image.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets', 'dhali/get-local-assets' ),
+						'block_tree'      =>
+							"Static variant (default — always build this first):\n" .
+							"  card-structure-edge-to-edge-image from get-editor-safe-block-snippets\n" .
+							"  Cover uses article-cover-card-with-pill snippet if badge overlaid on image\n" .
+							"  Content group:\n" .
+							"    core/paragraph [date — x-small, uppercase, letterSpacing:0.05em, main-accent]\n" .
+							"    core/heading [h2 or h3, title]\n" .
+							"    core/paragraph [• Read more link, small]\n" .
+							"\n" .
+							"Query Loop variant (only when explicitly requested):\n" .
+							"  core/query > core/post-template > post blocks",
+						'deep_validation' => 'Always — uses core/cover for the image.',
+						'ollie_slugs'     => array( 'ollie/blog-post-columns' ),
+						'notes'           => 'Always build the static variant first. Convert to Query Loop only when the user explicitly asks. Badge-in-image requires article-cover-card-with-pill from get-editor-safe-block-snippets.',
+					),
+
+					'intro' => array(
+						'pattern_type'    => 'intro',
+						'visual_signals'  => 'Text-only or text + small image section. Overline, heading, paragraph, optional link. No CTA buttons, no card shell.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton' ),
+						'block_tree'      =>
+							"core/group [section — align:full, bg, padding:xx-large/medium, constrained]\n" .
+							"  core/group [Titles — constrained, blockGap:small]\n" .
+							"    core/paragraph [overline — primary, fontWeight:500, small, center]\n" .
+							"    core/heading [center]\n" .
+							"    core/paragraph [center, secondary]",
+						'deep_validation' => 'Rarely. Only if a cover or linked group is included.',
+						'ollie_slugs'     => array( 'ollie/large-text-and-text-boxes' ),
+						'notes'           => 'Simplest pattern type. No images, no icons, no CTAs. Rarely needs get-editor-safe-block-snippets. Just the skeleton and tokens.',
+					),
+
+					'other' => array(
+						'pattern_type'    => 'other',
+						'visual_signals'  => 'Could not classify into a known type.',
+						'required_mcp'    => array( 'dhali/get-pattern-template-skeleton', 'dhali/get-editor-safe-block-snippets', 'dhali/get-local-assets' ),
+						'block_tree'      => 'Describe the visual layout in the proposal. Use constrained core/group as the outer section wrapper with align:full, bg, padding:xx-large/medium, margin:0.',
+						'deep_validation' => 'Use deep validation if core/cover, outermost/icon-block, or linked core/group is present.',
+						'ollie_slugs'     => array(),
+						'notes'           => 'Fetch all three MCP abilities to have full reference available.',
+					),
+
+				);
+
+				$approach = isset( $approaches[ $type ] ) ? $approaches[ $type ] : $approaches['other'];
+
+				return $approach;
+			},
+			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
+			'meta'                => dhali_mcp_public_tool_meta(),
+		),
+
 		'dhali/sync-context' => array(
 			'label'               => __( 'Sync context cache', 'dhali' ),
 			'description'         => __( 'Updates the project context markdown file with the current WordPress project state. After a successful sync the context file contains token slugs, layout settings, and available local image assets — no further MCP calls needed for standard pattern authoring.', 'dhali' ),
@@ -1795,19 +1937,24 @@ PHP;
 					'status'            => dhali_mcp_string_schema( 'success or error.' ),
 					'images'            => dhali_mcp_string_array_schema( 'Available image filenames from assets/images/.' ),
 					'icons'             => dhali_mcp_string_array_schema( 'Available icon filenames from assets/icons/.' ),
-					'image_php_pattern' => dhali_mcp_string_schema( 'PHP pattern for image src using the helper function.' ),
-					'icon_php_pattern'  => dhali_mcp_string_schema( 'PHP pattern for icon src using the helper function.' ),
-					'fallback_pattern'  => dhali_mcp_string_schema( 'PHP fallback using plugin_dir_url( dirname( __FILE__ ) ) for pattern files.' ),
-					'message'           => dhali_mcp_string_schema( 'Human-readable message.' ),
+					'snippets'          => dhali_mcp_string_array_schema( 'Available snippet HTML filenames from snippets/. Read with @wp_cli raw cat PLUGIN_PATH/snippets/FILENAME.html.' ),
+					'image_php_pattern' => dhali_mcp_string_schema( 'PHP pattern for image src.' ),
+					'icon_php_pattern'  => dhali_mcp_string_schema( 'PHP pattern for icon src.' ),
+					'snippet_read_cmd'  => dhali_mcp_string_schema( 'Command template for reading snippet files.' ),
+					'icon_selection_guide' => array( 'type' => 'object', 'description' => 'Map of icon filename to use case.' ),
+					'icon_read_cmd'     => dhali_mcp_string_schema( 'Command for reading and embedding an icon SVG.' ),
+					'message'           => dhali_mcp_string_schema( 'Summary.' ),
 				),
-				'required'   => array( 'status', 'images', 'icons', 'image_php_pattern', 'icon_php_pattern', 'fallback_pattern', 'message' ),
+				'required'   => array( 'status', 'images', 'icons', 'snippets', 'image_php_pattern', 'icon_php_pattern', 'snippet_read_cmd', 'icon_selection_guide', 'icon_read_cmd', 'message' ),
 			),
 			'execute_callback'    => function ( $input = array() ) {
 				$plugin_dir = plugin_dir_path( __FILE__ );
-				$images_dir = $plugin_dir . 'assets/images/';
-				$icons_dir  = $plugin_dir . 'assets/icons/';
-				$images     = array();
-				$icons      = array();
+				$images_dir   = $plugin_dir . 'assets/images/';
+				$icons_dir    = $plugin_dir . 'assets/icons/';
+				$snippets_dir = $plugin_dir . 'snippets/';
+				$images       = array();
+				$icons        = array();
+				$snippets     = array();
 
 				if ( is_dir( $images_dir ) ) {
 					foreach ( array_diff( scandir( $images_dir ), array( '.', '..' ) ) as $file ) {
@@ -1827,6 +1974,15 @@ PHP;
 					sort( $icons );
 				}
 
+				if ( is_dir( $snippets_dir ) ) {
+					foreach ( array_diff( scandir( $snippets_dir ), array( '.', '..' ) ) as $file ) {
+						if ( preg_match( '/\.html$/i', $file ) ) {
+							$snippets[] = $file;
+						}
+					}
+					sort( $snippets );
+				}
+
 				if ( empty( $images ) && empty( $icons ) ) {
 					return new WP_Error(
 						'no_assets_found',
@@ -1838,19 +1994,20 @@ PHP;
 					'status'            => 'success',
 					'images'            => array_values( $images ),
 					'icons'             => array_values( $icons ),
+					'snippets'          => array_values( $snippets ),
 					'image_php_pattern' => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '",
 					'icon_php_pattern'  => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/icons/FILENAME' ) . '",
-					'fallback_pattern'  => "' . esc_url( plugin_dir_url( dirname( __FILE__ ) ) . 'assets/images/FILENAME' ) . '",
+					'snippet_read_cmd'  => '@wp_cli raw cat PLUGIN_PATH/snippets/FILENAME.html',
 					'icon_selection_guide' => array(
-						'check.svg'       => 'Feature lists, benefits, confirmations, included items, bullet points',
-						'arrow-right.svg' => 'Directional CTAs, navigation links, read-more, next steps, flows',
-						'plus.svg'        => 'Add actions, expand, create, open, subscription CTAs',
-						'question.svg'    => 'Default decorative icon — use when no other icon fits the context',
-						'image.svg'       => 'Media, gallery, photography, visual content contexts',
-						'user.svg'        => 'Person, author, avatar, team member, profile contexts',
+						'check.svg'       => 'lists/confirmations/benefits',
+						'arrow-right.svg' => 'CTAs/navigation/read-more',
+						'plus.svg'        => 'add/expand/create actions',
+						'question.svg'    => 'DEFAULT — use when nothing else fits',
+						'image.svg'       => 'media/gallery/photography',
+						'user.svg'        => 'person/author/avatar/team',
 					),
-					'icon_read_instruction' => 'To embed a static icon: read the file with @wp_cli raw cat PLUGIN_PATH/assets/icons/FILENAME.svg then place the SVG markup inside outermost/icon-block with iconName:"". Do not generate a custom SVG if a static icon fits.',
-					'message'           => count( $images ) . ' images and ' . count( $icons ) . ' icons available. Select from icon_selection_guide, read the SVG file, and embed it. Only generate a custom SVG when no static icon fits the design.',
+					'icon_read_cmd'     => '@wp_cli raw cat PLUGIN_PATH/assets/icons/FILENAME.svg → embed in outermost/icon-block iconName:""',
+					'message'           => count( $images ) . ' images, ' . count( $icons ) . ' icons, ' . count( $snippets ) . ' snippet files available.',
 				);
 			},
 			'permission_callback' => function () { return current_user_can( 'edit_theme_options' ); },
