@@ -1126,28 +1126,6 @@ function dhali_mcp_lint_pattern_markup( $markup, $context = 'standalone' ) {
  * @return array<string, mixed>
  */
 
-			// TRUSTED: editor-safe Cover shape for image-card badge overlays.
-			// Serializer shape verified against WP 7.0 Block API v3:
-			// - Class order: is-light FIRST, then position classes
-			// - <img> BEFORE <span> in the saved HTML
-			// - All border-radius values (including "0") in the inline style
-			// - Badge pill border radius INSIDE "style" (NOT as a top-level "border" key)
-			// - minHeight included in block attrs when a fixed height is needed
-			// For plugin asset URLs: omit id attribute entirely, no wp-image-* class.
-			// For real media library images: add "id":INTEGER and wp-image-INTEGER class.
-			'article-cover-card-with-pill' =>
-				'<!-- wp:cover {"url":"PLUGIN_ASSET_URL","dimRatio":0,"customOverlayColor":"#c8cecf","isUserOverlayColor":true,"minHeight":240,"sizeSlug":"full","contentPosition":"top left","isDark":false,"style":{"border":{"radius":{"topLeft":"var:preset|border-radius|lg","topRight":"var:preset|border-radius|lg","bottomLeft":"0","bottomRight":"0"}}}} -->' .
-				'<div class="wp-block-cover is-light has-custom-content-position is-position-top-left" style="border-top-left-radius:var(--wp--preset--border-radius--lg);border-top-right-radius:var(--wp--preset--border-radius--lg);border-bottom-left-radius:0;border-bottom-right-radius:0;min-height:240px">' .
-				'<img class="wp-block-cover__image-background size-full" alt="" src="PLUGIN_ASSET_URL" data-object-fit="cover"/>' .
-				'<span aria-hidden="true" class="wp-block-cover__background has-background-dim-0 has-background-dim" style="background-color:#c8cecf"></span>' .
-				'<div class="wp-block-cover__inner-container">' .
-				'<!-- wp:group {"style":{"border":{"radius":"var:preset|border-radius|full"},"spacing":{"margin":{"top":"1.25rem","left":"1.25rem"},"padding":{"top":"0.25rem","right":"0.75rem","bottom":"0.25rem","left":"0.75rem"}}},"backgroundColor":"primary-accent","layout":{"type":"constrained"}} -->' .
-				'<div class="wp-block-group has-primary-accent-background-color has-background" style="border-radius:var(--wp--preset--border-radius--full);margin-top:1.25rem;margin-left:1.25rem;padding-top:0.25rem;padding-right:0.75rem;padding-bottom:0.25rem;padding-left:0.75rem">' .
-				'<!-- wp:paragraph {"style":{"typography":{"fontWeight":"500"}},"textColor":"main","fontSize":"x-small"} --><p class="has-main-color has-text-color has-x-small-font-size" style="font-weight:500">Category</p><!-- /wp:paragraph -->' .
-				'</div><!-- /wp:group -->' .
-				'</div></div><!-- /wp:cover -->',
-
-
 // ─── Ability registration ─────────────────────────────────────────────────────
 
 /**
